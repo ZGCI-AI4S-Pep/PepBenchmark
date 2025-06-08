@@ -1,0 +1,6 @@
+prune tdc/test
+prune tests
+prune tutorials
+include README.md
+include requirements.txt
+include LICENSE
