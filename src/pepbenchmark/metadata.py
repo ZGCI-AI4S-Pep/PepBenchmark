@@ -1,6 +1,6 @@
 import os
-DATA_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../data_share/peptide_dataset/processed_2025.6.06v/'))
-
+DATA_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../data_share/peptide_dataset/processed_2025.6.12v/'))
+print(DATA_DIR)
 
 
 natural_binary_keys = [
@@ -25,7 +25,7 @@ natural_binary_keys = [
     "Tox_APML"
 ]
 
-natural_multiclass_keys = []
+natural_multiclass_keys = ["cMultitask_Peptidepedia"]
 
 
 
@@ -380,12 +380,15 @@ DATASET_MAP = {
 
 
 
-def get_dataset_path(dataset_name,type='train'):
+def get_dataset_path(dataset_name, split = None, fold_seed = 1, type='train'):
     """
     Retrieve the path for a given dataset name.
 
     Args:
         dataset_name (str): The name of the dataset.
+        split (str, optional): The type of split to use ('Random_split', 'Homology_based_split'). If None, returns the path to 'combine.csv'.
+        fold_seed (int, optional): The seed for the random split. Ignored if `split` is None.
+        type (str, optional): The specific subset of the split to use ('train', 'test', or 'valid'). Ignored if `split` is None.
 
     Returns:
         str: The path to the dataset if it exists, otherwise None.
@@ -395,14 +398,22 @@ def get_dataset_path(dataset_name,type='train'):
         raise ValueError(f"Dataset {dataset_name} is not supported. Please choose from {list(DATASET_MAP.keys())}.")
     
     base_dir = DATASET_MAP.get(dataset_name)["path"]
-    if type not in ['train', 'test','valid']:
-        raise ValueError("Type must be one of 'train', 'test', or 'valid'.")
-    if type == 'train':
-        path== os.path.join(base_dir, 'train')
-    elif type == 'test':
-        path = os.path.join(base_dir, 'test')
-    elif type == 'valid':
-        path = os.path.join(base_dir, 'valid')
+
+    if split is None:
+        path = os.path.join(base_dir, 'combine.csv')
+    else:
+        split_path =  os.path.join(base_dir, split, 'random'+str(fold_seed))
+        if type not in ['train', 'test','valid']:
+            raise ValueError("Type must be one of 'train', 'test', or 'valid'.")
+        elif type == 'train':
+            path = os.path.join(split_path, 'train.csv')
+        elif type == 'test':
+            path = os.path.join(split_path, 'test.csv')
+        elif type == 'valid':
+            path = os.path.join(split_path, 'valid.csv')
+
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"The file {path} does not exist.")
 
     return path
 
