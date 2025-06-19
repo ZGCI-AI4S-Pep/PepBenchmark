@@ -1,5 +1,25 @@
+# Copyright ZGCA
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import os
-DATA_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../data_share/peptide_dataset/processed_2025.6.12v/'))
+
+DATA_DIR = os.path.abspath(
+    os.path.join(
+        os.path.dirname(__file__),
+        "../../data_share/peptide_dataset/processed_2025.6.12v/",
+    )
+)
 print(DATA_DIR)
 
 
@@ -22,31 +42,19 @@ natural_binary_keys = [
     "QS_APML",
     "TTCA_TCAHybrid",
     "Hemo_PeptideBERT",
-    "Tox_APML"
+    "Tox_APML",
 ]
 
 natural_multiclass_keys = ["cMultitask_Peptidepedia"]
 
 
+natural_regression_keys = ["all-AMP", "E.coli", "P.aeruginosa", "S.aureus", "HemoPI2"]
 
-natural_regression_keys = [
-    "all-AMP",
-    "E.coli",
-    "P.aeruginosa",
-    "S.aureus",
-    "HemoPI2"
-]
-
-non_natural_binary_keys = [
-    "ncAB_APML2",
-    "ncAV_APML2"
-]
+non_natural_binary_keys = ["ncAB_APML2", "ncAV_APML2"]
 
 non_natural_multiclass_keys = []
 
-non_natural_regression_keys = [
-    "ncCPP_CycPeptMPDB-PAMA"
-]
+non_natural_regression_keys = ["ncCPP_CycPeptMPDB-PAMA"]
 
 
 DATASET_MAP = {
@@ -60,7 +68,7 @@ DATASET_MAP = {
         "nature": "natural",
         "description": "Blood–brain barrier penetrating peptides (APML dataset)",
         "group": "ADME",
-        "format": "FASTA"
+        "format": "FASTA",
     },
     "cCPP_Pepland": {
         "path": os.path.join(DATA_DIR, "ADME/cCPP_Pepland"),
@@ -72,7 +80,7 @@ DATASET_MAP = {
         "nature": "natural",
         "description": "Cell penetrating peptides (Pepland dataset)",
         "group": "ADME",
-        "format": "FASTA"
+        "format": "FASTA",
     },
     "ncCPP_CycPeptMPDB-PAMA": {
         "path": os.path.join(DATA_DIR, "ADME/ncCPP_CycPeptMPDB-PAMA"),
@@ -84,7 +92,7 @@ DATASET_MAP = {
         "nature": "non-natural",
         "description": "Non-natural cell penetrating peptides (CycPeptMPDB-PAMA dataset)",
         "group": "ADME",
-        "format": "HELM"
+        "format": "HELM",
     },
     "Nonfouling": {
         "path": os.path.join(DATA_DIR, "ADME/Nonfouling"),
@@ -96,7 +104,7 @@ DATASET_MAP = {
         "nature": "natural",
         "description": "Nonfouling peptides",
         "group": "ADME",
-        "format": "FASTA"
+        "format": "FASTA",
     },
     "Solubility": {
         "path": os.path.join(DATA_DIR, "ADME/Solubility"),
@@ -108,7 +116,7 @@ DATASET_MAP = {
         "nature": "natural",
         "description": "Soluble vs insoluble peptides",
         "group": "ADME",
-        "format": "FASTA"
+        "format": "FASTA",
     },
     "AF_APML": {
         "path": os.path.join(DATA_DIR, "Theraputic-AMP/AF_APML"),
@@ -120,7 +128,7 @@ DATASET_MAP = {
         "nature": "natural",
         "description": "Antifungal peptides (APML dataset)",
         "group": "Therapeutic-AMP",
-        "format": "FASTA"
+        "format": "FASTA",
     },
     "all-AMP": {
         "path": os.path.join(DATA_DIR, "Theraputic-AMP/AMP-MIC/all-AMP"),
@@ -132,7 +140,7 @@ DATASET_MAP = {
         "nature": "natural",
         "description": "Antimicrobial peptides (MIC regression, all species)",
         "group": "Therapeutic-AMP",
-        "format": "FASTA"
+        "format": "FASTA",
     },
     "E.coli": {
         "path": os.path.join(DATA_DIR, "Theraputic-AMP/AMP-MIC/E.coli"),
@@ -144,7 +152,7 @@ DATASET_MAP = {
         "nature": "natural",
         "description": "Antimicrobial peptides (MIC regression, E. coli)",
         "group": "Therapeutic-AMP",
-        "format": "FASTA"
+        "format": "FASTA",
     },
     "P.aeruginosa": {
         "path": os.path.join(DATA_DIR, "Theraputic-AMP/AMP-MIC/P.aeruginosa"),
@@ -156,7 +164,7 @@ DATASET_MAP = {
         "nature": "natural",
         "description": "Antimicrobial peptides (MIC regression, P. aeruginosa)",
         "group": "Therapeutic-AMP",
-        "format": "FASTA"
+        "format": "FASTA",
     },
     "S.aureus": {
         "path": os.path.join(DATA_DIR, "Theraputic-AMP/AMP-MIC/S.aureus"),
@@ -168,7 +176,7 @@ DATASET_MAP = {
         "nature": "natural",
         "description": "Antimicrobial peptides (MIC regression, S. aureus)",
         "group": "Therapeutic-AMP",
-        "format": "FASTA"
+        "format": "FASTA",
     },
     "AMP_PepDiffusion": {
         "path": os.path.join(DATA_DIR, "Theraputic-AMP/AMP_PepDiffusion"),
@@ -180,7 +188,7 @@ DATASET_MAP = {
         "nature": "natural",
         "description": "Antimicrobial peptides (PepDiffusion dataset)",
         "group": "Therapeutic-AMP",
-        "format": "FASTA"
+        "format": "FASTA",
     },
     "AP_APML": {
         "path": os.path.join(DATA_DIR, "Theraputic-AMP/AP_APML"),
@@ -192,7 +200,7 @@ DATASET_MAP = {
         "nature": "natural",
         "description": "Antiparasite peptides (APML dataset)",
         "group": "Therapeutic-AMP",
-        "format": "FASTA"
+        "format": "FASTA",
     },
     "AV_APML": {
         "path": os.path.join(DATA_DIR, "Theraputic-AMP/AV_APML"),
@@ -204,7 +212,7 @@ DATASET_MAP = {
         "nature": "natural",
         "description": "Antiviral peptides (APML dataset)",
         "group": "Therapeutic-AMP",
-        "format": "FASTA"
+        "format": "FASTA",
     },
     "cAB_APML2": {
         "path": os.path.join(DATA_DIR, "Theraputic-AMP/cAB_APML2"),
@@ -216,7 +224,7 @@ DATASET_MAP = {
         "nature": "natural",
         "description": "Antibacterial peptides (canonical, APML2 dataset)",
         "group": "Therapeutic-AMP",
-        "format": "FASTA"
+        "format": "FASTA",
     },
     "ncAB_APML2": {
         "path": os.path.join(DATA_DIR, "Theraputic-AMP/ncAB_APML2"),
@@ -228,7 +236,7 @@ DATASET_MAP = {
         "nature": "non-natural",
         "description": "Antibacterial peptides (non-canonical, APML2 dataset)",
         "group": "Therapeutic-AMP",
-        "format": "BILN"
+        "format": "BILN",
     },
     "ncAV_APML2": {
         "path": os.path.join(DATA_DIR, "Theraputic-AMP/ncAV_APML2"),
@@ -240,7 +248,7 @@ DATASET_MAP = {
         "nature": "non-natural",
         "description": "Antiviral peptides (non-canonical, APML2 dataset)",
         "group": "Therapeutic-AMP",
-        "format": "BILN"
+        "format": "BILN",
     },
     "ACE_APML": {
         "path": os.path.join(DATA_DIR, "Theraputic-Other/ACE_APML"),
@@ -252,7 +260,7 @@ DATASET_MAP = {
         "nature": "natural",
         "description": "ACE-inhibitory peptides (APML dataset)",
         "group": "Therapeutic-Other",
-        "format": "FASTA"
+        "format": "FASTA",
     },
     "ACP_APML": {
         "path": os.path.join(DATA_DIR, "Theraputic-Other/ACP_APML"),
@@ -264,7 +272,7 @@ DATASET_MAP = {
         "nature": "natural",
         "description": "Anticancer peptides (APML dataset)",
         "group": "Therapeutic-Other",
-        "format": "FASTA"
+        "format": "FASTA",
     },
     "Aox_APML": {
         "path": os.path.join(DATA_DIR, "Theraputic-Other/Aox_APML"),
@@ -276,7 +284,7 @@ DATASET_MAP = {
         "nature": "natural",
         "description": "Antioxidative peptides (APML dataset)",
         "group": "Therapeutic-Other",
-        "format": "FASTA"
+        "format": "FASTA",
     },
     "DLAD_BioDADPep": {
         "path": os.path.join(DATA_DIR, "Theraputic-Other/DLAD_BioDADPep"),
@@ -288,7 +296,7 @@ DATASET_MAP = {
         "nature": "natural",
         "description": "Antidiabetic peptides (BioDADPep dataset)",
         "group": "Therapeutic-Other",
-        "format": "FASTA"
+        "format": "FASTA",
     },
     "DPPIV_APML": {
         "path": os.path.join(DATA_DIR, "Theraputic-Other/DPPIV_APML"),
@@ -300,7 +308,7 @@ DATASET_MAP = {
         "nature": "natural",
         "description": "Dipeptidyl peptidase inhibitor peptides (APML dataset)",
         "group": "Therapeutic-Other",
-        "format": "FASTA"
+        "format": "FASTA",
     },
     "Neuro_APML": {
         "path": os.path.join(DATA_DIR, "Theraputic-Other/Neuro_APML"),
@@ -312,7 +320,7 @@ DATASET_MAP = {
         "nature": "natural",
         "description": "Neuropeptides (APML dataset)",
         "group": "Therapeutic-Other",
-        "format": "FASTA"
+        "format": "FASTA",
     },
     "QS_APML": {
         "path": os.path.join(DATA_DIR, "Theraputic-Other/QS_APML"),
@@ -324,7 +332,7 @@ DATASET_MAP = {
         "nature": "natural",
         "description": "Quorum sensing peptides (APML dataset)",
         "group": "Therapeutic-Other",
-        "format": "FASTA"
+        "format": "FASTA",
     },
     "TTCA_TCAHybrid": {
         "path": os.path.join(DATA_DIR, "Theraputic-Other/TTCA_TCAHybrid"),
@@ -336,7 +344,7 @@ DATASET_MAP = {
         "nature": "natural",
         "description": "Tumor T cell antigens (TCAHybrid dataset)",
         "group": "Therapeutic-Other",
-        "format": "FASTA"
+        "format": "FASTA",
     },
     "HemoPI2": {
         "path": os.path.join(DATA_DIR, "Tox/HemoPI2"),
@@ -348,7 +356,7 @@ DATASET_MAP = {
         "nature": "natural",
         "description": "Hemolytic peptides with regression labels (HemoPI2 dataset)",
         "group": "Tox",
-        "format": "FASTA"
+        "format": "FASTA",
     },
     "Hemo_PeptideBERT": {
         "path": os.path.join(DATA_DIR, "Tox/Hemo_PeptideBERT"),
@@ -360,7 +368,7 @@ DATASET_MAP = {
         "nature": "natural",
         "description": "Hemolytic peptides (PeptideBERT dataset)",
         "group": "Tox",
-        "format": "FASTA"
+        "format": "FASTA",
     },
     "Tox_APML": {
         "path": os.path.join(DATA_DIR, "Tox/Tox_APML"),
@@ -372,15 +380,12 @@ DATASET_MAP = {
         "nature": "natural",
         "description": "Toxic peptides (APML dataset)",
         "group": "Tox",
-        "format": "FASTA"
-    }
+        "format": "FASTA",
+    },
 }
 
 
-
-
-
-def get_dataset_path(dataset_name, split = None, fold_seed = 1, type='train'):
+def get_dataset_path(dataset_name, split=None, fold_seed=1, type="train"):
     """
     Retrieve the path for a given dataset name.
 
@@ -393,27 +398,28 @@ def get_dataset_path(dataset_name, split = None, fold_seed = 1, type='train'):
     Returns:
         str: The path to the dataset if it exists, otherwise None.
     """
-    print(dataset_name,"*"*200)
+    print(dataset_name, "*" * 200)
     if dataset_name not in DATASET_MAP:
-        raise ValueError(f"Dataset {dataset_name} is not supported. Please choose from {list(DATASET_MAP.keys())}.")
-    
+        raise ValueError(
+            f"Dataset {dataset_name} is not supported. Please choose from {list(DATASET_MAP.keys())}."
+        )
+
     base_dir = DATASET_MAP.get(dataset_name)["path"]
 
     if split is None:
-        path = os.path.join(base_dir, 'combine.csv')
+        path = os.path.join(base_dir, "combine.csv")
     else:
-        split_path =  os.path.join(base_dir, split, 'random'+str(fold_seed))
-        if type not in ['train', 'test','valid']:
+        split_path = os.path.join(base_dir, split, "random" + str(fold_seed))
+        if type not in ["train", "test", "valid"]:
             raise ValueError("Type must be one of 'train', 'test', or 'valid'.")
-        elif type == 'train':
-            path = os.path.join(split_path, 'train.csv')
-        elif type == 'test':
-            path = os.path.join(split_path, 'test.csv')
-        elif type == 'valid':
-            path = os.path.join(split_path, 'valid.csv')
+        elif type == "train":
+            path = os.path.join(split_path, "train.csv")
+        elif type == "test":
+            path = os.path.join(split_path, "test.csv")
+        elif type == "valid":
+            path = os.path.join(split_path, "valid.csv")
 
     if not os.path.exists(path):
         raise FileNotFoundError(f"The file {path} does not exist.")
 
     return path
-

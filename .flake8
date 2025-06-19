@@ -1,0 +1,16 @@
+[flake8]
+max-line-length = 88
+ignore = E203, W503, E501
+select = B, C, E, F, W, N, T
+extend-select = B      # Enable Bugbear checks (must set or get NoneType error)
+exclude =
+    .git,
+    __pycache__,
+    build,
+    dist,
+    .venv,
+    venv,
+    examples
+
+per-file-ignores =
+    __init__.py: F401
