@@ -1,15 +1,19 @@
-import os
 import argparse
+import os
 import time
+
 import pandas as pd
 from tqdm import tqdm
-from pepbenchmark.metadata import DATASET_MAP
 from utils import FP_Converter, featurize, seq_to_mol, seq_to_smiles
+
+from pepbenchmark.metadata import DATASET_MAP
 
 tqdm.pandas()
 
-def process_split_files(base_dir: str, converter: FP_Converter, fp_type: str,
-                        nbits: int, radius: int) -> (int, float, str):
+
+def process_split_files(
+    base_dir: str, converter: FP_Converter, fp_type: str, nbits: int, radius: int
+) -> (int, float, str):
     """
     Process combined CSV file for a dataset:
      - Reads CSV
@@ -31,14 +35,16 @@ def process_split_files(base_dir: str, converter: FP_Converter, fp_type: str,
 
     # Featurize with progress
     tqdm.pandas(desc="Converting sequences to SMILES")
-    df["SMILES"] = df['sequence'].progress_apply(seq_to_smiles)
+    df["SMILES"] = df["sequence"].progress_apply(seq_to_smiles)
 
     fps = []
-    for fp in tqdm(featurize(df['sequence'], converter),
-                   total=data_count,
-                   desc="Generating fingerprints"):
+    for fp in tqdm(
+        featurize(df["sequence"], converter),
+        total=data_count,
+        desc="Generating fingerprints",
+    ):
         fps.append(fp.tolist())
-    df['fp'] = fps
+    df["fp"] = fps
 
     # Prepare output directory and save
     save_name = f"{fp_type}_nbits{nbits}_radius{radius}"
@@ -56,21 +62,21 @@ def parse_args():
         description="Process peptide datasets to generate fingerprint features."
     )
     parser.add_argument(
-        '--fp_type', type=str, default='ecfp',
-        help='Fingerprint type (e.g., ecfp, maccs)'
+        "--fp_type",
+        type=str,
+        default="ecfp",
+        help="Fingerprint type (e.g., ecfp, maccs)",
     )
     parser.add_argument(
-        '--nbits', type=int, default=2048,
-        help='Number of bits for fingerprint'
+        "--nbits", type=int, default=2048, help="Number of bits for fingerprint"
     )
     parser.add_argument(
-        '--radius', type=int, default=3,
-        help='Radius for fingerprint generation'
+        "--radius", type=int, default=3, help="Radius for fingerprint generation"
     )
     return parser.parse_args()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     args = parse_args()
     conv = FP_Converter(type=args.fp_type, nbits=args.nbits, radius=args.radius)
 
@@ -79,12 +85,12 @@ if __name__ == '__main__':
     for task, dataset_metadata in DATASET_MAP.items():
         nature = dataset_metadata.get("nature", "unknown")
         if nature == "natural":
-            base_dir = dataset_metadata['path']
+            base_dir = dataset_metadata["path"]
             data_count, elapsed, out_path = process_split_files(
                 base_dir=base_dir,
                 converter=conv,
                 fp_type=args.fp_type,
                 nbits=args.nbits,
-                radius=args.radius
+                radius=args.radius,
             )
             print(f"{task:<10} | {data_count:>7} | {elapsed:>8.2f} | {out_path}")

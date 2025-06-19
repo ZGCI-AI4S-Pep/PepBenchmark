@@ -1,4 +1,3 @@
-prune tdc/test
 prune tests
 prune tutorials
 include README.md
