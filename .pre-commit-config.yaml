@@ -1,0 +1,62 @@
+exclude: 'examples'  # Exclude the examples folder (supports regex)
+default_language_version:
+  python: python3
+
+repos:
+  # 🔹 Basic code safety checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace          # Remove trailing whitespace
+      - id: check-ast                    # Verify AST validity
+      - id: check-merge-conflict         # Detect unresolved merge conflicts
+      - id: no-commit-to-branch          # Prevent commits to protected branches
+        args: ['--branch=main']
+      - id: check-added-large-files      # Reject files over a certain size
+        args: ['--maxkb=1000']
+      - id: end-of-file-fixer            # Ensure file ends with a newline
+        exclude: '^(.*\.svg)$'           # Skip SVG files
+
+  # 🔹 Automatically insert license header
+  - repo: https://github.com/Lucas-C/pre-commit-hooks
+    rev: v1.5.5
+    hooks:
+      - id: insert-license               # Add license header to source files
+        files: \.py$|\.sh$
+        args:
+          - --license-filepath
+          - assets/license_header.txt
+
+  # 🔹 Traditional linting with flake8 and plugins
+  - repo: https://github.com/pycqa/flake8
+    rev: 7.1.1
+    hooks:
+      - id: flake8                       # Run flake8 linter
+        additional_dependencies:
+          - flake8-bugbear == 22.4.25    # Catch common bug patterns
+          - pep8-naming == 0.12.1        # Enforce naming conventions
+          - torchfix                     # Fixes for PyTorch code
+        args: ['--config=.flake8']
+
+  # 🔹 Unified formatting (ufmt = black + usort)
+  - repo: https://github.com/omnilib/ufmt
+    rev: v2.3.0
+    hooks:
+      - id: ufmt                         # Format and sort imports
+        additional_dependencies:
+          - black == 22.12.0             # Code formatter
+          - usort == 1.0.5               # Python import sorter
+        files: \.py$
+
+  # 🔹 Docstring style enforcement
+  - repo: https://github.com/jsh9/pydoclint
+    rev: d88180a8632bb1602a4d81344085cf320f288c5
+    hooks:
+      - id: pydoclint                    # Check docstring conventions
+
+  # ✅ Supplement: Ruff as combined linter and import sorter (recommended for new projects)
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.4.5  # See Ruff Releases for the latest stable version
+    hooks:
+      - id: ruff                         # Run Ruff linter
+      - id: ruff-format                  # Apply Ruff's auto-formatting

@@ -19,7 +19,6 @@ from typing import Dict, List
 import numpy as np
 import optuna
 import pandas as pd
-from pepbenchmark.metadata import DATASET_MAP  # noqa: F401
 from scipy.stats import pearsonr, spearmanr
 from sklearn.metrics import (
     accuracy_score,
@@ -27,8 +26,8 @@ from sklearn.metrics import (
     mean_absolute_error,
     mean_squared_error,
     precision_score,
-    recall_score,
     r2_score,
+    recall_score,
     roc_auc_score,
 )
 from sklearn.preprocessing import label_binarize
@@ -41,11 +40,15 @@ from transformers import (
     TrainingArguments,
     set_seed,
 )
-MAX_LEN=100
+
+from pepbenchmark.metadata import DATASET_MAP  # noqa: F401
+
+MAX_LEN = 100
 warnings.filterwarnings(
     "ignore",
     message="Was asked to gather along dimension 0, but all input tensors were scalars",
 )
+
 
 # ---------------------------------------------------------------------------
 # Dataset utilities
@@ -82,6 +85,7 @@ class SequenceDatasetWithLabels(Dataset):
 # Metric functions
 # ---------------------------------------------------------------------------
 
+
 def binary_classification_compute_metrics(pred):
     labels = pred.label_ids
     preds = pred.predictions.argmax(-1)
@@ -108,8 +112,12 @@ def multi_class_classification_compute_metrics(pred):
     try:
         n_classes = int(np.max(labels)) + 1
         labels_onehot = label_binarize(labels, classes=np.arange(n_classes))
-        roc_auc_ovr = roc_auc_score(labels_onehot, pred.predictions, average="macro", multi_class="ovr")
-        roc_auc_ovo = roc_auc_score(labels_onehot, pred.predictions, average="macro", multi_class="ovo")
+        roc_auc_ovr = roc_auc_score(
+            labels_onehot, pred.predictions, average="macro", multi_class="ovr"
+        )
+        roc_auc_ovo = roc_auc_score(
+            labels_onehot, pred.predictions, average="macro", multi_class="ovo"
+        )
     except Exception:
         roc_auc_ovr = roc_auc_ovo = None
     return {
@@ -155,7 +163,10 @@ MODEL_MAP = {
 # Helper: save predictions & metrics
 # ---------------------------------------------------------------------------
 
-def save_predictions_and_metrics(predictions_output, prefix: str, output_dir: str, dataset):
+
+def save_predictions_and_metrics(
+    predictions_output, prefix: str, output_dir: str, dataset
+):
     preds = predictions_output.predictions
     labels = predictions_output.label_ids
     metrics = predictions_output.metrics
@@ -164,14 +175,18 @@ def save_predictions_and_metrics(predictions_output, prefix: str, output_dir: st
     preds = np.argmax(preds, axis=1) if preds.ndim == 2 else preds.flatten()
 
     # Raw sequences are stored inside the dataset instance
-    df_preds = pd.DataFrame({
-        "sequence": dataset.sequences,
-        "prediction": preds,
-        "label": labels,
-    })
+    df_preds = pd.DataFrame(
+        {
+            "sequence": dataset.sequences,
+            "prediction": preds,
+            "label": labels,
+        }
+    )
     Path(output_dir).mkdir(parents=True, exist_ok=True)
     df_preds.to_csv(Path(output_dir) / f"{prefix}_predictions.csv", index=False)
-    pd.DataFrame([metrics]).to_csv(Path(output_dir) / f"{prefix}_metrics.csv", index=False)
+    pd.DataFrame([metrics]).to_csv(
+        Path(output_dir) / f"{prefix}_metrics.csv", index=False
+    )
     print(f"✅ Saved {prefix} predictions & metrics ▶ {output_dir}")
 
 
@@ -179,12 +194,29 @@ def save_predictions_and_metrics(predictions_output, prefix: str, output_dir: st
 # Argument parsing (unchanged except docstring)
 # ---------------------------------------------------------------------------
 
+
 def parse_args():
-    parser = argparse.ArgumentParser("Fine‑tune PLMs with optional hyper‑parameter tuning")
-    parser.add_argument("--task", type=str, default="Nonfouling", choices=list(DATASET_MAP.keys()))
-    parser.add_argument("--split_type", type=str, default="Random_split", choices=["Random_split", "Homology_based_split"])
-    parser.add_argument("--split_index", type=str, default="random1", choices=["random1", "random2", "random3", "random4", "random5"])
-    parser.add_argument("--model_name", type=str, default="esm2_150M", choices=list(MODEL_MAP.keys()))
+    parser = argparse.ArgumentParser(
+        "Fine‑tune PLMs with optional hyper‑parameter tuning"
+    )
+    parser.add_argument(
+        "--task", type=str, default="Nonfouling", choices=list(DATASET_MAP.keys())
+    )
+    parser.add_argument(
+        "--split_type",
+        type=str,
+        default="Random_split",
+        choices=["Random_split", "Homology_based_split"],
+    )
+    parser.add_argument(
+        "--split_index",
+        type=str,
+        default="random1",
+        choices=["random1", "random2", "random3", "random4", "random5"],
+    )
+    parser.add_argument(
+        "--model_name", type=str, default="esm2_150M", choices=list(MODEL_MAP.keys())
+    )
     parser.add_argument("--output_dir", type=str)
     # Training defaults (can be overridden by tuning)
     parser.add_argument("--num_train_epochs", type=int, default=30)
@@ -197,9 +229,17 @@ def parse_args():
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--report_to", type=str, default="all")
     # Auto‑tune flags
-    parser.add_argument("--auto_tune", action="store_true", help="Tune on random1 then apply to random2‑random5")
-    parser.add_argument("--n_trials", type=int, default=20, help="Optuna trials when auto‑tuning")
-    parser.add_argument("--tag", type=str, help="Optional experiment tag appended to output_dir")
+    parser.add_argument(
+        "--auto_tune",
+        action="store_true",
+        help="Tune on random1 then apply to random2‑random5",
+    )
+    parser.add_argument(
+        "--n_trials", type=int, default=20, help="Optuna trials when auto‑tuning"
+    )
+    parser.add_argument(
+        "--tag", type=str, help="Optional experiment tag appended to output_dir"
+    )
     return parser.parse_args()
 
 
@@ -207,11 +247,14 @@ def parse_args():
 # Hyper‑parameter search space for Optuna
 # ---------------------------------------------------------------------------
 
+
 def hp_space(trial):
     return {
         "learning_rate": trial.suggest_float("learning_rate", 1e-6, 1e-4, log=True),
         "weight_decay": trial.suggest_float("weight_decay", 0.0, 0.3),
-        "per_device_train_batch_size": trial.suggest_categorical("per_device_train_batch_size", [8,16,32,64]),
+        "per_device_train_batch_size": trial.suggest_categorical(
+            "per_device_train_batch_size", [8, 16, 32, 64]
+        ),
     }
 
 
@@ -219,12 +262,19 @@ def hp_space(trial):
 # Build TrainingArguments from base args + tuned params
 # ---------------------------------------------------------------------------
 
-def build_training_args(base_args, hyperparams: Dict, out_dir: str) -> TrainingArguments:
+
+def build_training_args(
+    base_args, hyperparams: Dict, out_dir: str
+) -> TrainingArguments:
     return TrainingArguments(
         output_dir=str(out_dir),
-        num_train_epochs=hyperparams.get("num_train_epochs", base_args.num_train_epochs),
+        num_train_epochs=hyperparams.get(
+            "num_train_epochs", base_args.num_train_epochs
+        ),
         learning_rate=hyperparams.get("learning_rate", base_args.learning_rate),
-        per_device_train_batch_size=hyperparams.get("per_device_train_batch_size", base_args.per_device_train_batch_size),
+        per_device_train_batch_size=hyperparams.get(
+            "per_device_train_batch_size", base_args.per_device_train_batch_size
+        ),
         warmup_steps=hyperparams.get("warmup_steps", base_args.warmup_steps),
         weight_decay=hyperparams.get("weight_decay", base_args.weight_decay),
         gradient_accumulation_steps=1,
@@ -245,11 +295,14 @@ def build_training_args(base_args, hyperparams: Dict, out_dir: str) -> TrainingA
 # Main routine
 # ---------------------------------------------------------------------------
 
+
 def main():
     args = parse_args()
 
     if args.task not in DATASET_MAP:
-        raise ValueError(f"Unknown task {args.task!r} – choose from {list(DATASET_MAP)}")
+        raise ValueError(
+            f"Unknown task {args.task!r} – choose from {list(DATASET_MAP)}"
+        )
 
     set_seed(args.seed)
 
@@ -257,14 +310,19 @@ def main():
     tokenizer = AutoTokenizer.from_pretrained(model_ckpt)
 
     # Experiment root directory
-    exp_root = Path(args.output_dir or Path("checkpoints") / args.task / args.split_type / args.model_name)
+    exp_root = Path(
+        args.output_dir
+        or Path("checkpoints") / args.task / args.split_type / args.model_name
+    )
     if args.tag:
         exp_root /= args.tag
     exp_root.mkdir(parents=True, exist_ok=True)
 
     meta = DATASET_MAP[args.task]
     task_type = meta["type"]
-    num_labels = 2 if task_type == "binary_classification" else meta.get("num_classes", 1)
+    num_labels = (
+        2 if task_type == "binary_classification" else meta.get("num_classes", 1)
+    )
 
     metric_fn = {
         "binary_classification": binary_classification_compute_metrics,
@@ -281,7 +339,9 @@ def main():
     val_ds = SequenceDatasetWithLabels(split_path / "valid.csv", tokenizer)
 
     def model_init():
-        return AutoModelForSequenceClassification.from_pretrained(model_ckpt, num_labels=num_labels)
+        return AutoModelForSequenceClassification.from_pretrained(
+            model_ckpt, num_labels=num_labels
+        )
 
     tune_args = build_training_args(args, {}, exp_root / "random1_tuning")
     tuner = Trainer(
@@ -290,7 +350,9 @@ def main():
         eval_dataset=val_ds,
         compute_metrics=metric_fn,
         model_init=model_init,
-        callbacks=[EarlyStoppingCallback(early_stopping_patience=args.early_stopping_patience)],
+        callbacks=[
+            EarlyStoppingCallback(early_stopping_patience=args.early_stopping_patience)
+        ],
     )
 
     best_run = tuner.hyperparameter_search(
@@ -347,4 +409,4 @@ def main():
 if __name__ == "__main__":
     main()
 
-# WANDB_PROJECT=ttt2 python test.py --num_train_epochs 30   --task AF_APML  --per_device_train_batch_size 16  --early_stopping_patience 5 --weight_decay 0.0 --split_type Homology_based_split --split_index random1 --model_name dplm_150m --auto_tune --n_trials 10 
+# WANDB_PROJECT=ttt2 python test.py --num_train_epochs 30   --task AF_APML  --per_device_train_batch_size 16  --early_stopping_patience 5 --weight_decay 0.0 --split_type Homology_based_split --split_index random1 --model_name dplm_150m --auto_tune --n_trials 10
