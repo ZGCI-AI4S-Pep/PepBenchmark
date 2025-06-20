@@ -35,14 +35,12 @@ from pepbenchmark.metadata import DATASET_MAP
 
 
 class FP_Converter:
-
     def __init__(self, type: str, nbits: int, radius: int):
         self.nbits = nbits
         self.radius = radius
         self.generator = self._load_generator(type)
 
     def __call__(self, mol):
-
         if mol is None:
             print("Warning: Invalid molecule, returning zero fingerprint.")
             fp = np.zeros((1, self.nbits))
@@ -51,7 +49,6 @@ class FP_Converter:
         return fp
 
     def _load_generator(self, fp_type: str):
-
         if "ecfp" in fp_type:
             return AllChem.GetMorganGenerator(
                 radius=self.radius,

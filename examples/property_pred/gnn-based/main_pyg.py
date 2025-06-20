@@ -189,7 +189,6 @@ def main():
         "Homology_based4",
         "Homology_based5",
     ):
-
         ### automatic dataloading and splitting
         tsmiles, tlabels = datasets(
             "/data0/data_share/peptide_dataset/processed_2025.6.06v/"

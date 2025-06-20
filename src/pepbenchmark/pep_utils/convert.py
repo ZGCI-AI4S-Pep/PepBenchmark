@@ -17,8 +17,15 @@ try:
     from rdkit import Chem, rdBase
 
     rdBase.DisableLog("rdApp.error")
-except:
-    raise ImportError("Please install rdkit by 'conda install -c conda-forge rdkit'! ")
+except ImportError as err:
+    raise ImportError(
+        "Please install rdkit by 'conda install -c conda-forge rdkit'! "
+    ) from err
+
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 class Peptide:
@@ -54,32 +61,35 @@ class Peptide:
         ], "Format not supported. Please choose from ['helm', 'biln', 'smiles']"
 
         if output_format == self.format:
-            print("The input and output formats are the same!")
-            new_sequence = self.sequence
+            logger.info("The input and output formats are the same!")
+            return self.sequence
 
         if output_format == "smiles":
-            if self.format == "fasta":
-                new_sequence = fasta2smiles(self.sequence)
-            elif self.format == "helm":
-                new_sequence = helm2smiles(self.sequence)
-            elif self.format == "biln":
-                new_sequence = biln2smiles(self.sequence)
-
+            return self._to_smiles()
         elif output_format == "helm":
-            if self.format == "biln":
-                seq_smi = biln2smiles(self.sequence)
-                new_sequence = smiles2helm(seq_smi)
-            elif self.format == "smiles":
-                new_sequence = smiles2helm(self.sequence)
-
+            return self._to_helm()
         elif output_format == "biln":
-            if self.format == "helm":
-                seq_smi = helm2smiles(self.sequence)
-                new_sequence = smiles2biln(seq_smi)
-            elif self.format == "smiles":
-                new_sequence = smiles2biln(self.sequence)
+            return self._to_biln()
 
-        return new_sequence
+    def _to_smiles(self):
+        if self.format == "fasta":
+            return fasta2smiles(self.sequence)
+        elif self.format == "helm":
+            return helm2smiles(self.sequence)
+        elif self.format == "biln":
+            return biln2smiles(self.sequence)
+
+    def _to_helm(self):
+        if self.format == "biln":
+            return smiles2helm(biln2smiles(self.sequence))
+        elif self.format == "smiles":
+            return smiles2helm(self.sequence)
+
+    def _to_biln(self):
+        if self.format == "helm":
+            return smiles2biln(helm2smiles(self.sequence))
+        elif self.format == "smiles":
+            return smiles2biln(self.sequence)
 
 
 # ---------- Conversion  ----------
@@ -87,8 +97,6 @@ class Peptide:
 
 def _seq_to_mol(fasta):
     """Convert peptide sequence to RDKit Mol object"""
-    if Chem.MolFromSequence(fasta) is None:
-        print(fasta)
     return Chem.MolFromSequence(fasta)
 
 

@@ -247,7 +247,6 @@ class GNN_node_Virtualnode(torch.nn.Module):
             )
 
     def forward(self, batched_data):
-
         x, edge_index, edge_attr, batch = (
             batched_data.x,
             batched_data.edge_index,

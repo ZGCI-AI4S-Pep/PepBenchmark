@@ -38,16 +38,6 @@ repos:
           - torchfix                     # Fixes for PyTorch code
         args: ['--config=.flake8']
 
-  # 🔹 Unified formatting (ufmt = black + usort)
-  - repo: https://github.com/omnilib/ufmt
-    rev: v2.3.0
-    hooks:
-      - id: ufmt                         # Format and sort imports
-        additional_dependencies:
-          - black == 22.12.0             # Code formatter
-          - usort == 1.0.5               # Python import sorter
-        files: \.py$
-
   # 🔹 Docstring style enforcement
   - repo: https://github.com/jsh9/pydoclint
     rev: d88180a8632bb1602a4d81344085cf320f288c5
@@ -59,4 +49,4 @@ repos:
     rev: v0.4.5  # See Ruff Releases for the latest stable version
     hooks:
       - id: ruff                         # Run Ruff linter
-      - id: ruff-format                  # Apply Ruff's auto-formatting
+      - id: ruff-format
