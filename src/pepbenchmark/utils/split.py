@@ -16,10 +16,8 @@
 try:
     from hestia.partition import ccpart_random
     from hestia.similarity import sequence_similarity_mmseqs
-except:
-    raise ImportError("Please install hestia by 'pip install hestia-good'! ")
-
-from .pairwise2 import sequence_similarity_pairwise2, split_by_similarity
+except ImportError as err:
+    raise ImportError("Please install hestia by 'pip install hestia-good'! ") from err
 
 
 def random_split(df, frac, seed):
@@ -69,23 +67,6 @@ def homology_based_split(df, frac, sim_threshold, seed, seq_alighment="mmseq2"):
             "test": df.iloc[valid, :].reset_index(drop=True),
         }
 
-    elif seq_alighment == "pairwise2":
-        sim_df = sequence_similarity_pairwise2(df, field_name="sequence")
-        train, test, valid = split_by_similarity(
-            df,
-            sim_df,
-            threshold=sim_threshold,
-            test_size=test_frac,
-            valid_size=val_frac,
-            seed=seed,
-        )
-
-        return {
-            "train": df.iloc[train, :].reset_index(drop=True),
-            "valid": df.iloc[test, :].reset_index(drop=True),
-            "test": df.iloc[valid, :].reset_index(drop=True),
-        }
-
 
 def cold_split(df, frac, sim_threshold, seed, entity="seq_protein"):
-    """"""
+    pass

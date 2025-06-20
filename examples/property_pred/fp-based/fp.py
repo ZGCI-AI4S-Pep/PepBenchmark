@@ -162,7 +162,6 @@ if __name__ == "__main__":
         ]
 
     else:
-
         # Featurization
         print(
             f"Featurizing with {args.fp_type} (nbits={args.nbits}, radius={args.radius})..."

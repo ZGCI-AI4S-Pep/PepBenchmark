@@ -12,6 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .convert import _seq_to_mol, fasta2smiles, Peptide
-from .featurizer import PeptideFeaturizer
-from .process import PepConvert
+from base_dataset import BaseDataset
+
+
+class PPIPredDataset(BaseDataset):
+    def __init__(self, data_path):
+        """"""

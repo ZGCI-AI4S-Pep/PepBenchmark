@@ -13,8 +13,7 @@
 # limitations under the License.
 
 import pandas as pd
-
-from src.pepbenchmark.metadata import get_dataset_path
+from metadata import get_dataset_path
 
 
 def retrieve_label_name_list(name):

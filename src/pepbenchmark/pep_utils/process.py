@@ -14,15 +14,14 @@
 
 import numpy as np
 import pandas as pd
+from pep_utils.convert import Peptide
+from pep_utils.featurizer import PeptideFeaturizer
 from tqdm.notebook import tqdm
-
-from .convert import Peptide
-from .featurizer import PeptideFeaturizer
 
 tqdm.pandas(desc="Converting sequences")
 
 
-def PepConvert(df, original_format, convert_format, feature_type, all_nature):
+def pepconvert(df, original_format, convert_format, feature_type, all_nature):
     #
     if convert_format is not None:
         df[convert_format] = df["sequence"].apply(
@@ -31,7 +30,6 @@ def PepConvert(df, original_format, convert_format, feature_type, all_nature):
             )
         )
 
-    # 特征提取
     if feature_type is not None:
         featurizer = PeptideFeaturizer(
             input_format=original_format,

@@ -293,7 +293,6 @@ if __name__ == "__main__":
         "multi_class_classification",
         "regression",
     ]:
-
         raise ValueError(
             f"Task type {task_type} is not supported. Please choose from 'binary_classification' or 'multi_class_classification'. (current task_type: {task_type})"
         )

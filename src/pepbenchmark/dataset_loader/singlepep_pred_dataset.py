@@ -12,17 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import logging
 import warnings
 
 import pandas as pd
-
-from src.pepbenchmark.metadata import get_dataset_path
-
-from ..metadata import DATASET_MAP
-from ..utils import cold_split, homology_based_split, random_split
-from .base_dataset import BaseDataset
+from dataset_loader.base_dataset import BaseDataset
+from metadata import DATASET_MAP, get_dataset_path
+from utils.split import cold_split, homology_based_split, random_split
 
 warnings.filterwarnings("ignore")
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 class SingleTaskDataset(BaseDataset):
@@ -61,14 +62,14 @@ class SingleTaskDataset(BaseDataset):
             AttributeError: format not supported
         """
 
-        if (self.convert_format is not None) or (self.convert_result is None):
-            from ..pep_utils import PepConvert
+        if (self.convert_format is not None) or (self.feature_type is None):
+            from pep_utils.process import pepconvert
 
         self.split_ready = split_ready
 
-        if split_ready == False:
+        if split_ready is False:
             df = self.dataset.copy()
-            df = PepConvert(
+            df = pepconvert(
                 df,
                 self.raw_format,
                 self.convert_format,
@@ -85,7 +86,7 @@ class SingleTaskDataset(BaseDataset):
 
             assert fold_seed in [1, 2, 3, 4, 5], "fold_seed should be 1, 2, 3, 4, or 5."
 
-            print("Loading split ready dataset")
+            logger.info("Loading split ready dataset")
             dict_split = {}
             for split_type in ["train", "valid", "test"]:
                 df_split = pd.read_csv(
@@ -93,7 +94,7 @@ class SingleTaskDataset(BaseDataset):
                         self.dataset_name, split=split, fold_seed=1, type=split_type
                     )
                 )
-                dict_split[split_type] = PepConvert(
+                dict_split[split_type] = pepconvert(
                     df_split,
                     self.raw_format,
                     self.convert_format,
@@ -108,11 +109,12 @@ class SingleTaskDataset(BaseDataset):
         self,
         method="random",
         seed=42,
-        frac=[0.8, 0.1, 0.1],
+        frac=None,
         seq_alighment="mmseq2",
         sim_threshold=None,
         visualization=False,
     ):
+        frac = [0.8, 0.1, 0.1] if frac is None else frac
         df = self.get_data(format="df", split_ready=False)
 
         if method == "random":
@@ -133,23 +135,3 @@ class SingleTaskDataset(BaseDataset):
         self.split = split
         self.split_ready = True
         return split
-
-
-class MutiTaskDataset(BaseDataset):
-    """def __init__(self,
-                 dataset_name: str,
-                 label_name = None,
-                 convert_format = None,
-                 feature_type = None,
-                 ):
-
-                         if (dataset_name in natural_multiclass_keys) or (dataset_name in non_natural_multiclass_keys):
-            if label_name is None:
-                raise ValueError(
-                    "Please select a label name.. You can use pepbenchmark.utils.retrieve_label_name_list('"
-                    + dataset_name +"') to retrieve all available label names.")
-
-    self.dataset = property_dataset_load(dataset_name, label_name)
-        self.sequence = self.dataset['sequence'].tolist()
-        self.label = self.dataset['label']
-        self.split_ready = False"""

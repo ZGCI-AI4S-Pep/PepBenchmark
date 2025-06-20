@@ -12,14 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import logging
 from typing import List, Union
 
 import numpy as np
 import pandas as pd
+from pep_utils.convert import _seq_to_mol, biln2smiles, fasta2smiles, helm2smiles
 from rdkit import Chem
 from rdkit.Chem import AllChem, Descriptors
 
-from .convert import _seq_to_mol, biln2smiles, fasta2smiles, helm2smiles
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 class PeptideFeaturizer:
@@ -42,7 +45,7 @@ class PeptideFeaturizer:
         self.input_format = input_format
         self.feature_type = feature_type
 
-        if is_natural == True:
+        if is_natural:
             assert (
                 feature_type
                 in [
@@ -91,7 +94,7 @@ class PeptideFeaturizer:
             return featurizer_smi(smi_seqs, self.feature_type)
 
 
-class FP_Converter:
+class FPConverter:
     def __init__(self, type: str, nbits: int, radius: int):
         self.nbits = nbits
         self.radius = radius
@@ -99,7 +102,7 @@ class FP_Converter:
 
     def __call__(self, mol):
         if mol is None:
-            print("Warning: Invalid molecule, returning zero fingerprint.")
+            logger.info("Warning: Invalid molecule, returning zero fingerprint.")
             fp = np.zeros((1, self.nbits))
         else:
             fp = self.generator.GetCountFingerprintAsNumPy(mol)
@@ -131,11 +134,6 @@ class FP_Converter:
 
 
 class DescriptorCalculator:
-    """
-    计算给定肽分子的常见物化描述符。
-    输入为 RDKit 分子对象，输出为 descriptor 向量。
-    """
-
     def __init__(self, type: str = "rdkit_des"):
         self.descriptor_type = type.lower()
         self.descriptor_funcs = self._load_calculator(self.descriptor_type)
@@ -148,11 +146,11 @@ class DescriptorCalculator:
 
     def __call__(self, mol):
         if mol is None:
-            print("Warning: Invalid molecule, returning zero vector.")
+            logger.info("Warning: Invalid molecule, returning zero vector.")
 
         else:
             features = []
-            for name, func in self.descriptor_funcs:
+            for _, func in self.descriptor_funcs:
                 try:
                     val = func(mol)
                 except Exception:
@@ -165,20 +163,20 @@ class DescriptorCalculator:
 
 def one_hot_encode(sequence: str) -> np.ndarray:
     """One-hot encode a peptide sequence"""
-    STANDARD_AAS = "ACDEFGHIKLMNPQRSTVWY"
-    AA_TO_INDEX = {aa: i for i, aa in enumerate(STANDARD_AAS)}
-    one_hot = np.zeros((len(sequence), len(STANDARD_AAS)))
+    standard_aas = "ACDEFGHIKLMNPQRSTVWY"
+    aa_to_index = {aa: i for i, aa in enumerate(standard_aas)}
+    one_hot = np.zeros((len(sequence), len(standard_aas)))
     for i, aa in enumerate(sequence):
-        if aa in AA_TO_INDEX:
-            one_hot[i, AA_TO_INDEX[aa]] = 1
+        if aa in aa_to_index:
+            one_hot[i, aa_to_index[aa]] += 1
     return one_hot
 
 
-class pep_descriptor:
-    """"""
+class PepDescriptor:
+    pass
 
 
-def FP_featurize(input_format, sequences, converter):
+def fp_featurize(input_format, sequences, converter):
     """Convert list of sequences to fingerprint features"""
     features = []
     for seq in sequences:
@@ -193,7 +191,7 @@ def FP_featurize(input_format, sequences, converter):
     return features
 
 
-def DP_featurize(input_format, sequences, converter):
+def dp_featurize(input_format, sequences, converter):
     """Convert list of sequences to descriptor features"""
     features = []
     for seq in sequences:
@@ -227,21 +225,21 @@ def featurizer_fasta(fastas: str, feature_type: str) -> Union[np.ndarray, List]:
         featurizer_smi(smi_seqs, feature_type)
 
     elif feature_type in ["ecfp", "fcfp"]:
-        converter = FP_Converter(type=feature_type, nbits=1024, radius=2)
-        return FP_featurize("fasta", fastas, converter)
+        converter = FPConverter(type=feature_type, nbits=1024, radius=2)
+        return fp_featurize("fasta", fastas, converter)
 
     elif feature_type == "esm2_embedding":
-        """"""
+        pass
 
     elif feature_type == "onehot":
         return pd.DataFrame([{"onehot": one_hot_encode(seq)} for seq in fastas])
 
     elif feature_type == "rdkit_des":
         converter = DescriptorCalculator(type=feature_type)
-        return DP_featurize("fasta", fastas, converter)
+        return dp_featurize("fasta", fastas, converter)
 
     elif feature_type == "pep_descriptors":
-        """"""
+        pass
 
 
 def featurizer_smi(smiles: str, feature_type: str):
@@ -255,11 +253,11 @@ def featurizer_smi(smiles: str, feature_type: str):
         ]
     ), "Feature type not supported. Please choose from ['ecfp', 'fcfp', 'graph', 'rdkit_des']"
     if feature_type in ["ecfp", "fcfp"]:
-        converter = FP_Converter(type=feature_type, nbits=1024, radius=2)
-        return FP_featurize("smiles", smiles, converter)
+        converter = FPConverter(type=feature_type, nbits=1024, radius=2)
+        return fp_featurize("smiles", smiles, converter)
     elif feature_type == "rdkit_des":
         converter = DescriptorCalculator(type=feature_type)
-        return DP_featurize("smiles", smiles, converter)
+        return dp_featurize("smiles", smiles, converter)
 
     elif feature_type == "graph":
-        """"""
+        pass
