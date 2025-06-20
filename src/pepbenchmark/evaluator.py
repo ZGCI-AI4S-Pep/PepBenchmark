@@ -12,12 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from scipy.stats import pearsonr, spearmanr
 from sklearn.metrics import (
     accuracy_score,
     average_precision_score,
     cohen_kappa_score,
     f1_score,
+    mean_absolute_error,
+    mean_squared_error,
     precision_score,
+    r2_score,
     recall_score,
     roc_auc_score,
 )
@@ -37,8 +41,6 @@ Classification_Metric_Map = {
     "kappa": cohen_kappa_score,
 }
 
-from scipy.stats import pearsonr, spearmanr
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
 Regression_Metric_Map = {
     "mse": mean_squared_error,

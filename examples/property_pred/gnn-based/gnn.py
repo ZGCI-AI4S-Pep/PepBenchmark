@@ -13,7 +13,6 @@ from torch_geometric.nn.inits import uniform
 
 
 class GNN(torch.nn.Module):
-
     def __init__(
         self,
         num_tasks,

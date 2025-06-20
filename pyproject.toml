@@ -9,18 +9,21 @@ dependencies = []
 
 [tool.black]
 line-length = 88
-target-version = ["py39"]
+target-version = ["py310"]
 
 [tool.isort]
 profile = "black"
 line_length = 88
-known_first_party = ["your_package_name"]
+known_first_party = ["pepbenchmark"]
 multi_line_output = 3
 include_trailing_comma = true
 
 [tool.ruff]
 line-length = 88
+fix = true
 target-version = "py39"
+
+[tool.ruff.lint]
 extend-select = ["E", "F", "B", "C", "I", "N", "T"]
 ignore = ["E203", "E501"]   # 从列表里去掉 W503
 exclude = [

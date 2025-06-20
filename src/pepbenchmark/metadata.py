@@ -12,7 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import logging
 import os
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 DATA_DIR = os.path.abspath(
     os.path.join(
@@ -20,7 +24,7 @@ DATA_DIR = os.path.abspath(
         "../../data_share/peptide_dataset/processed_2025.6.12v/",
     )
 )
-print(DATA_DIR)
+logger.info(DATA_DIR)
 
 
 natural_binary_keys = [
@@ -398,7 +402,7 @@ def get_dataset_path(dataset_name, split=None, fold_seed=1, type="train"):
     Returns:
         str: The path to the dataset if it exists, otherwise None.
     """
-    print(dataset_name, "*" * 200)
+    logger.info(f"Retrieving dataset path for: {dataset_name}")
     if dataset_name not in DATASET_MAP:
         raise ValueError(
             f"Dataset {dataset_name} is not supported. Please choose from {list(DATASET_MAP.keys())}."

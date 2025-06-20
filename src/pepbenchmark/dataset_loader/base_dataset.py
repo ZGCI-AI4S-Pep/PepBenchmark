@@ -12,15 +12,31 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import logging
 import warnings
 from collections import Counter
 from typing import List, Optional
 
 import numpy as np
 import pandas as pd
+from metadata import DATASET_MAP
+from utils.augmentation import (
+    combine,
+    random_delete,
+    random_insertion_with_a,
+    random_replace,
+    random_replace_with_a,
+    random_swap,
+)
+from utils.split import cold_split, homology_based_split, random_split
+from visualization.distribution import (
+    plot_peptide_distribution,
+    plot_peptide_distribution_spited,
+)
 
-from ..metadata import DATASET_MAP
-from ..utils import cold_split, homology_based_split, random_split
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 
 warnings.filterwarnings("ignore")
 
@@ -58,11 +74,12 @@ class BaseDataset:
         self,
         method="random",
         seed=42,
-        frac=[0.8, 0.1, 0.1],
+        frac=None,
         seq_alighment="mmseq2",
         sim_threshold=None,
         visualization=False,
     ):
+        frac = [0.8, 0.1, 0.1] if frac is None else frac
         df = self.get_data(format="df")
 
         if method == "random":
@@ -87,41 +104,21 @@ class BaseDataset:
     def deduplicate(
         self, mode: str = "average", dedup_keys: Optional[List[str]] = None
     ) -> pd.DataFrame:
-        assert mode in [
-            "min",
-            "max",
-            "average",
-            "leave_one",
-            "majority",
-            "remove_all",
-        ], f"Invalid mode: {mode}"
-
         dedup_keys = dedup_keys
         df = self.dataset.copy()
 
         if self.type == "regression":
-            assert mode in [
-                "min",
-                "max",
-                "average",
-            ], f"Invalid mode: {mode} for regression"
-
             grouped = df.groupby(dedup_keys, as_index=False)
             if mode == "average":
-                df = grouped["label"].mean()
+                df = grouped["label"].mean().reset_index()
             elif mode == "min":
-                df = grouped["label"].min()
+                df = grouped["label"].min().reset_index()
             elif mode == "max":
-                df = grouped["label"].max()
+                df = grouped["label"].max().reset_index()
             else:
                 raise NotImplementedError(f"Mode {mode} not implemented.")
 
         elif self.type == "binary_classification":
-            assert mode in [
-                "majority",
-                "leave_one",
-                "remove_all",
-            ], f"Invalid mode: {mode} for binary classification"
 
             def resolve_conflict(subdf):
                 label_counts = Counter(subdf["label"])
@@ -133,8 +130,6 @@ class BaseDataset:
                     majority_label = label_counts.most_common(1)[0][0]
                     majority_rows = subdf[subdf["label"] == majority_label]
                     return majority_rows.iloc[[0]]
-                elif mode == "leave_one":
-                    return subdf.iloc[[0]]
                 else:
                     raise ValueError(f"Unsupported mode '{mode}' for classification")
 
@@ -150,34 +145,25 @@ class BaseDataset:
         return self
 
     def augmentation(self, method: str = "random_replace", ratio: float = 0.02):
-        from ..utils import (
-            combine,
-            random_delete,
-            random_insertion_with_A,
-            random_replace,
-            random_replace_with_A,
-            random_swap,
-        )
-
         assert method in [
             "random_replace",
             "random_delete",
-            "random_replace_with_A",
+            "random_replace_with_a",
             "random_swap",
-            "random_insertion_with_A",
+            "random_insertion_with_a",
         ], f"Invalid method: {method}"
         if method == "random_replace":
             new_inputs, new_labels = random_replace(self.sequence, self.label, ratio)
         elif method == "random_delete":
             new_inputs, new_labels = random_delete(self.sequence, self.label, ratio)
-        elif method == "random_replace_with_A":
-            new_inputs, new_labels = random_replace_with_A(
+        elif method == "random_replace_with_a":
+            new_inputs, new_labels = random_replace_with_a(
                 self.sequence, self.label, ratio
             )
         elif method == "random_swap":
             new_inputs, new_labels = random_swap(self.sequence, self.label, ratio)
-        elif method == "random_insertion_with_A":
-            new_inputs, new_labels = random_insertion_with_A(
+        elif method == "random_insertion_with_a":
+            new_inputs, new_labels = random_insertion_with_a(
                 self.sequence, self.label, ratio
             )
 
@@ -201,9 +187,9 @@ class BaseDataset:
             )
 
         if len(np.unique(self.label)) == 2:
-            print("The data is already binarized!")
+            logger.info("The data is already binarized!")
         else:
-            print(
+            logger.info(
                 "Binariztion using threshold "
                 + str(threshold)
                 + ", default, we assume the smaller values are 1 "
@@ -261,23 +247,19 @@ class BaseDataset:
         return self
 
     def label_distribution(self):
-        """"""
+        pass
 
     def pep_distribution(self):
         "Visualize the distribution of peptides in the dataset."
-        from ..visualization import (
-            plot_peptide_distribution,
-            plot_peptide_distribution_spited,
-        )
 
-        if self.split_ready == False:
+        if self.split_ready is False:
             plot_peptide_distribution(self.dataset, self.dataset_name, self.type)
         else:
             plot_peptide_distribution_spited(self.split, self.dataset_name, self.type)
 
     def print_stats(self):
         """print statistics"""
-        print(
+        logger.info(
             "There are "
             + str(len(self.sequence))
             + " sampels, and "
@@ -287,4 +269,4 @@ class BaseDataset:
 
     def get_metadata(self):
         inform_dict = DATASET_MAP.get(self.dataset_name)
-        print(inform_dict)
+        logger.info(inform_dict)
