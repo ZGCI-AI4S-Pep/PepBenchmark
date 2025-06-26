@@ -134,3 +134,4 @@ wandb/
 checkpoints*
 *.log
 __pycache__/
+docs/build/

@@ -12,56 +12,71 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""
+Peptide Dataset Metadata and Registry.
+This module contains metadata definitions and configuration for all peptide
+datasets included in the PepBenchmark suite. It serves as a central registry
+for dataset information, including dataset keys, categories, data paths, and
+validation utilities.
+The metadata system enables:
+- Consistent dataset naming and organization
+- Automated dataset discovery and loading
+- Validation of dataset configurations
+- Easy extension with new datasets
+
+Dataset Categories:
+- Natural Binary: Binary classification tasks with natural amino acids
+- Synthetic Binary: Binary classification with synthetic/modified peptides
+- Natural Regression: Regression tasks with natural amino acids
+- Synthetic Regression: Regression with synthetic/modified peptides
+
+Each dataset is identified by a unique key and contains information about:
+- Data source and preprocessing details
+- Task type (classification/regression)
+- Peptide type (natural/synthetic)
+- Performance baselines and evaluation metrics
+
+Example:
+    >>> from pepbenchmark.metadata import natural_binary_keys, get_all_datasets
+    >>>
+    >>> # List available natural binary classification datasets
+    >>> print(natural_binary_keys)
+    ['BBP_APML', 'cCPP_Pepland', 'Solubility', ...]
+    >>>
+    >>> # Get all dataset metadata
+    >>> all_datasets = get_all_datasets()
+    >>> print(f"Total datasets: {len(all_datasets)}")
+"""
+
 import logging
 import os
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-DATA_DIR = os.path.abspath(
-    os.path.join(
-        os.path.dirname(__file__),
-        "../../data_share/peptide_dataset/processed_2025.6.12v/",
-    )
+# Base directory for processed peptide datasets
+DEFAULT_DATA_DIR = os.path.expanduser(
+    "~/.pepbenchmark_cache/data_share/peptide_dataset/processed_2025.6.12v/"
 )
-logger.info(DATA_DIR)
+DATA_DIR = os.environ.get("PEPBENCHMARK_DATA_DIR", DEFAULT_DATA_DIR)
 
 
-natural_binary_keys = [
-    "BBP_APML",
-    "cCPP_Pepland",
-    "Nonfouling",
-    "Solubility",
-    "AF_APML",
-    "AMP_PepDiffusion",
-    "AP_APML",
-    "AV_APML",
-    "cAB_APML2",
-    "ACE_APML",
-    "ACP_APML",
-    "Aox_APML",
-    "DLAD_BioDADPep",
-    "DPPIV_APML",
-    "Neuro_APML",
-    "QS_APML",
-    "TTCA_TCAHybrid",
-    "Hemo_PeptideBERT",
-    "Tox_APML",
-]
-
-natural_multiclass_keys = ["cMultitask_Peptidepedia"]
-
-
-natural_regression_keys = ["all-AMP", "E.coli", "P.aeruginosa", "S.aureus", "HemoPI2"]
-
-non_natural_binary_keys = ["ncAB_APML2", "ncAV_APML2"]
-
-non_natural_multiclass_keys = []
-
-non_natural_regression_keys = ["ncCPP_CycPeptMPDB-PAMA"]
+logger.info(f"Dataset directory: {DATA_DIR}")
 
 
 DATASET_MAP = {
+    "test": {
+        "path": os.path.join(DATA_DIR, "ADME/test"),
+        "type": "binary_classification",
+        "num_class": 2,
+        "size": 238,
+        "size_range": "5–53",
+        "max_len": 53,
+        "nature": "natural",
+        "description": "Blood–brain barrier penetrating peptides (APML dataset)",
+        "group": "ADME",
+        "format": "FASTA",
+    },
     "BBP_APML": {
         "path": os.path.join(DATA_DIR, "ADME/BBP_APML"),
         "type": "binary_classification",
@@ -389,41 +404,186 @@ DATASET_MAP = {
 }
 
 
-def get_dataset_path(dataset_name, split=None, fold_seed=1, type="train"):
-    """
-    Retrieve the path for a given dataset name.
+# 添加数据集下载相关的URL信息到DATASET_MAP
+# 注意：实际使用时需要在每个数据集条目中添加"url"字段和可选的"checksum"字段
+# 例如: "url": "https://example.com/dataset.csv", "checksum": "md5hash"
 
-    Args:
-        dataset_name (str): The name of the dataset.
-        split (str, optional): The type of split to use ('Random_split', 'Homology_based_split'). If None, returns the path to 'combine.csv'.
-        fold_seed (int, optional): The seed for the random split. Ignored if `split` is None.
-        type (str, optional): The specific subset of the split to use ('train', 'test', or 'valid'). Ignored if `split` is None.
+
+# 动态生成数据集分类列表
+
+
+def _generate_dataset_keys():
+    """
+    从DATASET_MAP中动态生成各种数据集分类列表
+    """
+    natural_binary = []
+    natural_multiclass = []
+    natural_regression = []
+    non_natural_binary = []
+    non_natural_multiclass = []
+    non_natural_regression = []
+
+    for dataset_name, info in DATASET_MAP.items():
+        is_natural = info["nature"] == "natural"
+        task_type = info["type"]
+
+        if is_natural:
+            if task_type == "binary_classification":
+                natural_binary.append(dataset_name)
+            elif task_type == "multiclass_classification":
+                natural_multiclass.append(dataset_name)
+            elif task_type == "regression":
+                natural_regression.append(dataset_name)
+        else:  # non-natural
+            if task_type == "binary_classification":
+                non_natural_binary.append(dataset_name)
+            elif task_type == "multiclass_classification":
+                non_natural_multiclass.append(dataset_name)
+            elif task_type == "regression":
+                non_natural_regression.append(dataset_name)
+
+    return {
+        "natural_binary": natural_binary,
+        "natural_multiclass": natural_multiclass,
+        "natural_regression": natural_regression,
+        "non_natural_binary": non_natural_binary,
+        "non_natural_multiclass": non_natural_multiclass,
+        "non_natural_regression": non_natural_regression,
+    }
+
+
+_dataset_keys = _generate_dataset_keys()
+natural_binary_keys = _dataset_keys["natural_binary"]
+natural_multiclass_keys = _dataset_keys["natural_multiclass"]
+natural_regression_keys = _dataset_keys["natural_regression"]
+non_natural_binary_keys = _dataset_keys["non_natural_binary"]
+non_natural_multiclass_keys = _dataset_keys["non_natural_multiclass"]
+non_natural_regression_keys = _dataset_keys["non_natural_regression"]
+
+
+def get_all_datasets():
+    """
+    Get metadata for all available datasets.
 
     Returns:
-        str: The path to the dataset if it exists, otherwise None.
+        dict: Complete DATASET_MAP containing all dataset metadata
+
+    Examples:
+        >>> datasets = get_all_datasets()
+        >>> print(f"Total datasets: {len(datasets)}")
+        >>> print("Available datasets:", list(datasets.keys()))
     """
-    logger.info(f"Retrieving dataset path for: {dataset_name}")
+    return DATASET_MAP.copy()
+
+
+def get_datasets_by_category():
+    """
+    Get datasets organized by category and task type.
+
+    Returns:
+        dict: Nested dictionary with structure:
+            {
+                'natural': {
+                    'binary': [...],
+                    'multiclass': [...],
+                    'regression': [...]
+                },
+                'synthetic': {
+                    'binary': [...],
+                    'multiclass': [...],
+                    'regression': [...]
+                }
+            }
+
+    Examples:
+        >>> categories = get_datasets_by_category()
+        >>> print("Natural binary datasets:", categories['natural']['binary'])
+        >>> print("Synthetic regression datasets:", categories['synthetic']['regression'])
+    """
+    dataset_keys = _generate_dataset_keys()
+    return {
+        "natural": {
+            "binary": dataset_keys["natural_binary"].copy(),
+            "multiclass": dataset_keys["natural_multiclass"].copy(),
+            "regression": dataset_keys["natural_regression"].copy(),
+        },
+        "synthetic": {
+            "binary": dataset_keys["non_natural_binary"].copy(),
+            "multiclass": dataset_keys["non_natural_multiclass"].copy(),
+            "regression": dataset_keys["non_natural_regression"].copy(),
+        },
+    }
+
+
+def get_dataset_info(dataset_name):
+    """
+    Get detailed information about a specific dataset.
+
+    Args:
+        dataset_name (str): Name of the dataset
+
+    Returns:
+        dict: Dataset metadata including path, type, size, etc.
+
+    Raises:
+        ValueError: If dataset_name is not found
+
+    Examples:
+        >>> info = get_dataset_info("BBP_APML")
+        >>> print(f"Dataset type: {info['type']}")
+        >>> print(f"Dataset size: {info['size']}")
+        >>> print(f"Description: {info['description']}")
+    """
     if dataset_name not in DATASET_MAP:
+        available = list(DATASET_MAP.keys())
         raise ValueError(
-            f"Dataset {dataset_name} is not supported. Please choose from {list(DATASET_MAP.keys())}."
+            f"Dataset '{dataset_name}' not found. " f"Available datasets: {available}"
         )
+    return DATASET_MAP[dataset_name].copy()
 
-    base_dir = DATASET_MAP.get(dataset_name)["path"]
 
-    if split is None:
-        path = os.path.join(base_dir, "combine.csv")
-    else:
-        split_path = os.path.join(base_dir, split, "random" + str(fold_seed))
-        if type not in ["train", "test", "valid"]:
-            raise ValueError("Type must be one of 'train', 'test', or 'valid'.")
-        elif type == "train":
-            path = os.path.join(split_path, "train.csv")
-        elif type == "test":
-            path = os.path.join(split_path, "test.csv")
-        elif type == "valid":
-            path = os.path.join(split_path, "valid.csv")
+def validate_dataset_files(dataset_name):
+    """
+    Validate that all expected files exist for a dataset.
 
-    if not os.path.exists(path):
-        raise FileNotFoundError(f"The file {path} does not exist.")
+    Args:
+        dataset_name (str): Name of the dataset to validate
 
-    return path
+    Returns:
+        dict: Validation results with missing files and status
+
+    Examples:
+        >>> results = validate_dataset_files("BBP_APML")
+        >>> if results['valid']:
+        ...     print("All files present")
+        >>> else:
+        ...     print("Missing files:", results['missing'])
+    """
+    if dataset_name not in DATASET_MAP:
+        return {"valid": False, "error": f"Dataset {dataset_name} not found"}
+
+    base_path = DATASET_MAP[dataset_name]["path"]
+    missing_files = []
+
+    # Check combine.csv
+    combine_path = os.path.join(base_path, "combine.csv")
+    if not os.path.exists(combine_path):
+        missing_files.append("combine.csv")
+
+    # Check common split directories
+    for split_type in ["Random_split", "Homology_based_split"]:
+        split_dir = os.path.join(base_path, split_type)
+        if os.path.exists(split_dir):
+            # Check for random1 subdirectory (most common)
+            random_dir = os.path.join(split_dir, "random1")
+            if os.path.exists(random_dir):
+                for subset in ["train.csv", "test.csv", "valid.csv"]:
+                    subset_path = os.path.join(random_dir, subset)
+                    if not os.path.exists(subset_path):
+                        missing_files.append(f"{split_type}/random1/{subset}")
+
+    return {
+        "valid": len(missing_files) == 0,
+        "missing": missing_files,
+        "base_path": base_path,
+    }

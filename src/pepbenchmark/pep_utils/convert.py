@@ -12,111 +12,432 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""
+Peptide Sequence Conversion and Manipulation Module.
 
-try:
-    from rdkit import Chem, rdBase
+This module provides the Peptide class for handling peptide sequences in various
+formats and performing conversions between different representations. It supports
+multiple peptide sequence formats including FASTA, HELM, BiLN, and SMILES.
 
-    rdBase.DisableLog("rdApp.error")
-except ImportError as err:
-    raise ImportError(
-        "Please install rdkit by 'conda install -c conda-forge rdkit'! "
-    ) from err
+The module enables:
+- Peptide sequence format validation and conversion
+- Structure-based representations (SMILES, HELM)
+- Bioinformatics standard formats (FASTA)
+- Custom peptide notation systems (BiLN)
 
-import logging
+Classes:
+    Peptide: Main class for peptide sequence handling and conversion
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+Dependencies:
+    - rdkit: For chemical structure handling and SMILES processing
+    - logging: For operation logging and debugging
+
+Example:
+    >>> # Create peptide from FASTA sequence
+    >>> peptide = Peptide("ALAGGGPCR", format="fasta")
+    >>>
+    >>> # Convert to SMILES representation
+    >>> smiles = peptide.to("smiles")
+    >>>
+    >>> # Convert to HELM notation
+    >>> helm = peptide.to("helm")
+"""
+
+# Configure logging for this module
+import numpy as np
+import torch
+from rdkit import Chem
+from rdkit.Chem import AllChem, MACCSkeys
+from transformers import AutoModel, AutoTokenizer
+
+from pepbenchmark.utils.logging import get_logger
+
+logger = get_logger()
 
 
-class Peptide:
+class FormatTransform:
     """
-    Arguments:
-        sequence (str, optional): the peptide sequence.
-        raw_format (str, optional): the peptide sequence format ('fasta', 'helm', 'biln', 'smiles'])
-
-    Returns:
-        pd.DataFrame/dict[str, pd.DataFrame]
-
-    Raises:
-        AttributeError: format not supported
+    Base class for peptide format transformations.
     """
 
-    def __init__(self, sequence: str, format: str, all_nature: bool = True):
-        assert format in [
-            "fasta",
-            "helm",
-            "biln",
-            "smiles",
-        ], "Format not supported. Please choose from ['fasta', 'helm', 'biln','smiles']"
-
-        self.sequence = sequence
-        self.format = format
-        self.all_nature = all_nature
-
-    def to(self, output_format):
-        assert output_format in [
-            "helm",
-            "biln",
-            "smiles",
-        ], "Format not supported. Please choose from ['helm', 'biln', 'smiles']"
-
-        if output_format == self.format:
-            logger.info("The input and output formats are the same!")
-            return self.sequence
-
-        if output_format == "smiles":
-            return self._to_smiles()
-        elif output_format == "helm":
-            return self._to_helm()
-        elif output_format == "biln":
-            return self._to_biln()
-
-    def _to_smiles(self):
-        if self.format == "fasta":
-            return fasta2smiles(self.sequence)
-        elif self.format == "helm":
-            return helm2smiles(self.sequence)
-        elif self.format == "biln":
-            return biln2smiles(self.sequence)
-
-    def _to_helm(self):
-        if self.format == "biln":
-            return smiles2helm(biln2smiles(self.sequence))
-        elif self.format == "smiles":
-            return smiles2helm(self.sequence)
-
-    def _to_biln(self):
-        if self.format == "helm":
-            return smiles2biln(helm2smiles(self.sequence))
-        elif self.format == "smiles":
-            return smiles2biln(self.sequence)
+    def __call__(self, *args, **kwargs):
+        raise NotImplementedError("Subclasses must implement __call__ method.")
 
 
-# ---------- Conversion  ----------
+class Fasta2Smiles(FormatTransform):
+    """
+    Transform a protein sequence in FASTA format into a SMILES string representing the peptide.
+    """
+
+    def __call__(self, fasta: str) -> str:
+        # Parse the FASTA: remove headers and join sequence lines
+        lines = fasta.strip().splitlines()
+        seq_lines = [line.strip() for line in lines if not line.startswith(">")]
+        sequence = "".join(seq_lines)
+
+        if not sequence:
+            raise ValueError("No sequence found in FASTA input.")
+
+        # Use RDKit to build a peptide from the sequence
+        # Chem.MolFromSequence handles standard amino acids
+        peptide = Chem.MolFromSequence(sequence)
+        if peptide is None:
+            raise ValueError(f"Failed to generate molecule from sequence: {sequence}")
+
+        # Convert the molecule to SMILES
+        smiles = Chem.MolToSmiles(peptide)
+        return smiles
 
 
-def _seq_to_mol(fasta):
-    """Convert peptide sequence to RDKit Mol object"""
-    return Chem.MolFromSequence(fasta)
+class Smiles2FP(FormatTransform):
+    """
+    Transform a SMILES string into a single molecular fingerprint as a numpy array.
+
+    Parameters in __init__:
+        fp_type (str): fingerprint type to compute. Options:
+            - 'Morgan'
+            - 'RDKit'
+            - 'MACCS'
+            - 'TopologicalTorsion'
+            - 'AtomPair'
+        kwargs: hyperparameters for the chosen fingerprint:
+            - Morgan: radius (int), nBits (int)
+            - RDKit: fpSize (int)
+            - TopologicalTorsion: nBits (int)
+            - AtomPair: nBits (int)
+    """
+
+    def __init__(self, fp_type: str = "Morgan", **kwargs):
+        self.available_fps = [
+            "Morgan",
+            "RDKit",
+            "MACCS",
+            "TopologicalTorsion",
+            "AtomPair",
+        ]
+        if fp_type not in self.available_fps:
+            raise ValueError(f"Unsupported fingerprint type: {fp_type}")
+        self.fp_type = fp_type
+        # Default hyperparameters
+        self.params = {
+            "Morgan": {"radius": 2, "nBits": 2048},
+            "RDKit": {"fpSize": 2048},
+            "MACCS": {},
+            "TopologicalTorsion": {"nBits": 2048},
+            "AtomPair": {"nBits": 2048},
+        }
+        # Override defaults with any provided kwargs
+        self.params[self.fp_type].update(kwargs)
+
+    def __call__(self, smiles: str) -> np.ndarray:
+        # Parse SMILES into RDKit molecule
+        mol = Chem.MolFromSmiles(smiles)
+        if mol is None:
+            raise ValueError(f"Invalid SMILES string: {smiles}")
+
+        fp_type = self.fp_type
+        p = self.params[fp_type]
+        # Compute the specified fingerprint
+        if fp_type == "Morgan":
+            fp = AllChem.GetMorganFingerprintAsBitVect(
+                mol, radius=p["radius"], nBits=p["nBits"]
+            )
+        elif fp_type == "RDKit":
+            fp = Chem.RDKFingerprint(mol, fpSize=p["fpSize"])
+        elif fp_type == "MACCS":
+            fp = MACCSkeys.GenMACCSKeys(mol)
+        elif fp_type == "TopologicalTorsion":
+            fp = AllChem.GetHashedTopologicalTorsionFingerprintAsBitVect(
+                mol, nBits=p["nBits"]
+            )
+        elif fp_type == "AtomPair":
+            fp = AllChem.GetHashedAtomPairFingerprintAsBitVect(mol, nBits=p["nBits"])
+        else:
+            # Should never happen
+            raise ValueError(f"Unsupported fingerprint type: {fp_type}")
+
+        # Convert bit vector to numpy array of ints
+        bit_str = fp.ToBitString()
+        arr = np.fromiter(bit_str, dtype=int)
+        return arr
 
 
-def fasta2smiles(fasta: str):
-    """Convert peptide sequence to SMILES representation"""
-    mol = _seq_to_mol(fasta)
-    return Chem.MolToSmiles(mol) if mol else ""
+# Example usage:
+# transformer_fp = Smiles2FP(fp_type='Morgan', radius=3, nBits=1024)
+# smiles_str = 'CC(=O)Oc1ccccc1C(=O)O'
+# fingerprint = transformer_fp(smiles_str)
+# print(fingerprint)  # List of ints for each bit
 
 
-def biln2smiles(biln: str):
-    """"""
+class Fasta2Embedding(FormatTransform):
+    """
+    Convert FASTA sequence to molecular embedding using a pretrained model.
+    If `model` is a string, initialize with Transformers; if it is a PyTorch model instance,
+    it can be any `torch.nn.Module`. In that case, the model should provide a `tokenizer` attribute
+    or have `config.name_or_path` for inference.
+
+    Args:
+        model: HuggingFace model identifier (str) or a PyTorch `nn.Module` instance.
+        device: Optional device string (e.g., 'cuda', 'cpu'). Defaults to GPU if available else CPU.
+    """
+
+    def __init__(self, model, device: str = None):
+        # Select device: use provided or default to GPU if available
+        self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+
+        # Load tokenizer and model based on input type
+        if isinstance(model, str):
+            # Load from HuggingFace Hub
+            self.tokenizer = AutoTokenizer.from_pretrained(model, use_fast=False)
+            self.model = AutoModel.from_pretrained(model)
+        elif isinstance(model, torch.nn.Module):
+            # Use provided PyTorch model instance
+            self.model = model
+            # Try to get tokenizer from model attribute
+            if hasattr(model, "tokenizer"):
+                self.tokenizer = model.tokenizer
+            else:
+                # Attempt to infer from config name
+                model_id = getattr(getattr(model, "config", None), "name_or_path", None)
+                if model_id:
+                    self.tokenizer = AutoTokenizer.from_pretrained(
+                        model_id, use_fast=False
+                    )
+                else:
+                    raise ValueError(
+                        "Cannot infer tokenizer for provided PyTorch model. "
+                        "Please attach a `tokenizer` attribute or supply a model name string."
+                    )
+        else:
+            raise ValueError(
+                "`model` must be a string model identifier or a PyTorch nn.Module instance."
+            )
+
+        # Move model to chosen device and set to evaluation mode
+        self.model.to(self.device)
+        self.model.eval()
+
+    def __call__(self, fasta: str):
+        """
+        Convert a FASTA-formatted string to an embedding using the pretrained model.
+
+        Args:
+            fasta: FASTA string (header lines start with '>') containing one sequence.
+
+        Returns:
+            numpy.ndarray: Embedding vector of shape (hidden_dim,) obtained by mean-pooling the last hidden states.
+        """
+        # Parse FASTA: remove header lines and concatenate sequence lines
+        lines = fasta.strip().splitlines()
+        sequence = "".join(line.strip() for line in lines if not line.startswith(">"))
+
+        # Tokenize sequence and move inputs to device
+        inputs = self.tokenizer(sequence, return_tensors="pt")
+        inputs = {key: tensor.to(self.device) for key, tensor in inputs.items()}
+
+        # Forward pass without gradient computation
+        with torch.no_grad():
+            outputs = self.model(**inputs)
+
+        # Extract last hidden states and apply mean pooling over sequence dimension
+        hidden_states = (
+            outputs.last_hidden_state
+        )  # tensor of shape (1, seq_len, hidden_dim)
+        embedding = hidden_states.mean(dim=1).squeeze(
+            0
+        )  # tensor of shape (hidden_dim,)
+
+        # Return as NumPy array on CPU
+        return embedding.cpu().numpy()
 
 
-def helm2smiles(helm: str):
-    """"""
+class Fasta2Helm(FormatTransform):
+    def __call__(self, fasta: str) -> str:
+        logger.warning("FASTA to HELM conversion not yet implemented")
+        return ""
 
 
-def smiles2biln(smiles: str):
-    """"""
+class Fasta2Biln(FormatTransform):
+    def __call__(self, fasta: str) -> str:
+        logger.warning("FASTA to BiLN conversion not yet implemented")
+        return ""
 
 
-def smiles2helm(smiles: str):
-    """"""
+class Smiles2Fasta(FormatTransform):
+    def __call__(self, smiles: str) -> str:
+        logger.warning("SMILES to FASTA conversion not yet implemented")
+        return ""
+
+
+class Smiles2Helm(FormatTransform):
+    def __call__(self, smiles: str) -> str:
+        logger.warning("SMILES to HELM conversion not yet implemented")
+        return ""
+
+
+class Smiles2Biln(FormatTransform):
+    def __call__(self, smiles: str) -> str:
+        logger.warning("SMILES to BiLN conversion not yet implemented")
+        return ""
+
+
+class Helm2Fasta(FormatTransform):
+    def __call__(self, helm: str) -> str:
+        logger.warning("HELM to FASTA conversion not yet implemented")
+        return ""
+
+
+class Helm2Smiles(FormatTransform):
+    def __call__(self, helm: str) -> str:
+        logger.warning("HELM to SMILES conversion not yet implemented")
+        return ""
+
+
+class Helm2Biln(FormatTransform):
+    def __call__(self, helm: str) -> str:
+        logger.warning("HELM to BiLN conversion not yet implemented")
+        return ""
+
+
+class Biln2Fasta(FormatTransform):
+    def __call__(self, biln: str) -> str:
+        logger.warning("BiLN to FASTA conversion not yet implemented")
+        return ""
+
+
+class Biln2Smiles(FormatTransform):
+    def __call__(self, biln: str) -> str:
+        logger.warning("BiLN to SMILES conversion not yet implemented")
+        return ""
+
+
+class Biln2Helm(FormatTransform):
+    def __call__(self, biln: str) -> str:
+        logger.warning("BiLN to HELM conversion not yet implemented")
+        return ""
+
+
+class Mol2Fingerprint(FormatTransform):
+    """
+    Convert a SMILES or RDKit Mol object to a molecular fingerprint (e.g., Morgan).
+    """
+
+    def __call__(self, mol_or_smiles, radius=2, nbits=2048):
+        if isinstance(mol_or_smiles, str):
+            mol = Chem.MolFromSmiles(mol_or_smiles)
+        else:
+            mol = mol_or_smiles
+        if mol is None:
+            logger.warning("Invalid molecule for fingerprint generation.")
+            return None
+        from rdkit.Chem import AllChem
+
+        fp = AllChem.GetMorganFingerprintAsBitVect(mol, radius, nBits=nbits)
+        # Return as numpy array for ML usage
+        import numpy as np
+
+        arr = np.zeros((nbits,), dtype=int)
+        from rdkit.DataStructs import ConvertToNumpyArray
+
+        ConvertToNumpyArray(fp, arr)
+        return arr
+
+
+class Mol2Embedding(FormatTransform):
+    """
+    Use a pretrained model to get molecular embedding from SMILES or Mol.
+    Placeholder for actual model integration.
+    """
+
+    def __init__(self, model=None):
+        self.model = model  # Placeholder for actual model
+
+    def __call__(self, mol_or_smiles):
+        # Placeholder: return dummy embedding or raise NotImplementedError
+        logger.warning(
+            "Pretrained model embedding not implemented. Please integrate your model."
+        )
+        return None
+
+
+class Sequence2Embedding(FormatTransform):
+    """
+    Convert FASTA sequence to molecular embedding using a pretrained model.
+    If `model` is a string, initialize with Transformers; if it is a PyTorch model instance,
+    it can be any `torch.nn.Module`. In that case, the model should provide a `tokenizer` attribute
+    or have `config.name_or_path` for inference.
+
+    Args:
+        model: HuggingFace model identifier (str)
+        device: Optional device string (e.g., 'cuda', 'cpu'). Defaults to GPU if available else CPU.
+    """
+
+    def __init__(self, model, device: str = None):
+        # Select device: use provided or default to GPU if available
+        self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+
+        # Load tokenizer and model based on input type
+        self.tokenizer = AutoTokenizer.from_pretrained(model, use_fast=False)
+        self.model = AutoModel.from_pretrained(model)
+
+        # Move model to chosen device and set to evaluation mode
+        self.model.to(self.device)
+        self.model.eval()
+
+    def __call__(self, fasta: str):
+        """
+        Convert a FASTA-formatted string to an embedding using the pretrained model.
+
+        Args:
+            fasta: FASTA string (header lines start with '>') containing one sequence.
+
+        Returns:
+            numpy.ndarray: Embedding vector of shape (hidden_dim,) obtained by mean-pooling the last hidden states.
+        """
+        # Parse FASTA: remove header lines and concatenate sequence lines
+        lines = fasta.strip().splitlines()
+        sequence = "".join(line.strip() for line in lines if not line.startswith(">"))
+
+        # Tokenize sequence and move inputs to device
+        inputs = self.tokenizer(sequence, return_tensors="pt")
+        inputs = {key: tensor.to(self.device) for key, tensor in inputs.items()}
+
+        # Forward pass without gradient computation
+        with torch.no_grad():
+            outputs = self.model(**inputs)
+
+        # Extract last hidden states and apply mean pooling over sequence dimension
+        hidden_states = (
+            outputs.last_hidden_state
+        )  # tensor of shape (1, seq_len, hidden_dim)
+        embedding = hidden_states.mean(dim=1).squeeze(
+            0
+        )  # tensor of shape (hidden_dim,)
+
+        # Return as NumPy array on CPU
+        return embedding.cpu().numpy()
+
+
+AVALIABLE_TRANSFORM = {
+    ("fasta", "smiles"): Fasta2Smiles(),
+    ("fasta", "helm"): Fasta2Helm(),
+    ("fasta", "biln"): Fasta2Biln(),
+    ("smiles", "fasta"): Smiles2Fasta(),
+    ("smiles", "helm"): Smiles2Helm(),
+    ("smiles", "biln"): Smiles2Biln(),
+    ("helm", "fasta"): Helm2Fasta(),
+    ("helm", "smiles"): Helm2Smiles(),
+    ("helm", "biln"): Helm2Biln(),
+    ("biln", "fasta"): Biln2Fasta(),
+    ("biln", "smiles"): Biln2Smiles(),
+    ("biln", "helm"): Biln2Helm(),
+    ("mol", "fingerprint"): Mol2Fingerprint(),
+    ("mol", "embedding"): Mol2Embedding(),
+    ("smiles", "fingerprint"): Mol2Fingerprint(),
+    ("smiles", "embedding"): Mol2Embedding(),
+}
+
+if __name__ == "__main__":
+    fasta2smiles = Fasta2Smiles()
+    smile = fasta2smiles("ALAGGGPCR")
+    logger.info(f"SMILES: {smile}")
