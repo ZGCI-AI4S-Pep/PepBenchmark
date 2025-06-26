@@ -12,16 +12,108 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""
+Peptide Distribution Visualization Module.
+
+This module provides functions for visualizing the distribution patterns
+of peptide datasets, including length distributions, amino acid compositions,
+and label distributions across different dataset splits (train/test/validation).
+
+The visualizations help in understanding dataset characteristics and can be
+used for:
+- Quality assessment of dataset splits
+- Bias detection in peptide representations
+- Exploratory data analysis
+- Publication-ready figures for research papers
+
+Key Features:
+- Peptide length distribution plots across different splits
+- Amino acid composition analysis with heatmaps
+- Label distribution visualization for classification tasks
+- Support for both binary and multi-class classification
+- Customizable styling with matplotlib and seaborn
+
+Example:
+    >>> import pandas as pd
+    >>> from pepbenchmark.visualization.distribution import plot_peptide_distribution_spited
+    >>>
+    >>> # Prepare data dictionary with train/test/val splits
+    >>> data_dict = {
+    ...     'train': train_df,
+    ...     'test': test_df,
+    ...     'val': val_df
+    ... }
+    >>>
+    >>> # Generate distribution plots
+    >>> plot_peptide_distribution_spited(
+    ...     data_dict,
+    ...     dataset_name="Example Dataset",
+    ...     type="binary_classification"
+    ... )
+"""
+
 from collections import Counter, defaultdict
 
 import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
 
+# Standard amino acid order for consistent visualization
 aa_order = list("ACDEFGHIKLMNPQRSTVWY")
 
 
 def plot_peptide_distribution_spited(data_dict, dataset_name, type):
+    """
+    Create comprehensive distribution plots for peptide datasets.
+
+    This function generates a multi-panel visualization showing peptide length
+    distributions, amino acid compositions, and label distributions across
+    different dataset splits (train/test/validation).
+
+    Args:
+        data_dict (dict): Dictionary mapping split names to DataFrames.
+            Each DataFrame should contain 'sequence' and 'label' columns.
+            Expected keys: 'train', 'test', 'val' or similar.
+        dataset_name (str): Name of the dataset for plot titles.
+        type (str): Type of classification task. Supported values:
+            - "binary_classification": For binary labels (0/1)
+            - "regression": For continuous labels
+            - "multi_classification": For multi-class labels
+
+    Returns:
+        None: Displays the generated plots using matplotlib.
+
+    Raises:
+        KeyError: If required columns ('sequence', 'label') are missing
+        ValueError: If type parameter is not recognized
+
+    Examples:
+        >>> # Binary classification example
+        >>> data_dict = {
+        ...     'train': pd.DataFrame({
+        ...         'sequence': ['ACDE', 'FGHI', 'KLMN'],
+        ...         'label': [0, 1, 1]
+        ...     }),
+        ...     'test': pd.DataFrame({
+        ...         'sequence': ['PQRS', 'TVWY'],
+        ...         'label': [0, 1]
+        ...     })
+        ... }
+        >>> plot_peptide_distribution_spited(
+        ...     data_dict,
+        ...     "Example Dataset",
+        ...     "binary_classification"
+        ... )
+
+    Notes:
+        - Generates three types of plots:
+          1. Peptide length distribution (KDE plots)
+          2. Amino acid composition heatmap
+          3. Label distribution bar plots
+        - Uses seaborn styling for publication-ready figures
+        - Automatically handles label mapping for binary classification
+        - Plots are saved with high DPI (200) for clarity
+    """
     plt.rcParams["figure.dpi"] = 200
     plt.rcParams["font.family"] = ["Times New Roman"]
 

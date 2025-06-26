@@ -11,11 +11,3 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-
-def sample_from_bioactive():
-    pass
-
-
-def neg_sample(df, frac, column_names, two_types=False):
-    pass

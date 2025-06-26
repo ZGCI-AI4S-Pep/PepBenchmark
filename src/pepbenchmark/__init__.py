@@ -11,10 +11,3 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-from base_dataset import BaseDataset
-
-
-class PPIPredDataset(BaseDataset):
-    def __init__(self, data_path):
-        """"""
