@@ -13,7 +13,7 @@ tqdm.pandas()
 
 def process_split_files(
     base_dir: str, converter: FP_Converter, fp_type: str, nbits: int, radius: int
-) -> (int, float, str):
+):
     """
     Process combined CSV file for a dataset:
      - Reads CSV

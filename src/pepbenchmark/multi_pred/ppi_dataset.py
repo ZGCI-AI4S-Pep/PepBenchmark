@@ -12,11 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import pandas as pd
-from metadata import get_dataset_path
 
-
-def retrieve_label_name_list(name):
-    path = get_dataset_path(name)
-    df = pd.read_csv(path)
-    return df.columns.values
+class PPIPredDataset(object):
+    def __init__(self, data_path):
+        """"""
