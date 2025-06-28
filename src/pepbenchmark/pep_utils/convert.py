@@ -50,9 +50,18 @@ from rdkit import Chem
 from rdkit.Chem import AllChem, MACCSkeys
 from transformers import AutoModel, AutoTokenizer
 
+from pepbenchmark.external.pep.builder import MolBuilder
+from pepbenchmark.external.pep.library import MonomerLibrary
+from pepbenchmark.external.pep.parsers.biln_parser import BilnParser, BilnSerializer
+from pepbenchmark.external.pep.parsers.fasta_parser import FastaParser, FastaSerializer
+from pepbenchmark.external.pep.parsers.helm_parser import HelmParser, HelmSerializer
 from pepbenchmark.utils.logging import get_logger
 
 logger = get_logger()
+
+lib = MonomerLibrary.from_sdf_file(
+    "test_library", "src/pepbenchmark/external/pep/resources/monomers.sdf"
+)
 
 
 class FormatTransform:
@@ -253,14 +262,32 @@ class Fasta2Embedding(FormatTransform):
 
 class Fasta2Helm(FormatTransform):
     def __call__(self, fasta: str) -> str:
-        logger.warning("FASTA to HELM conversion not yet implemented")
-        return ""
+        # Parse the FASTA: remove headers and join sequence lines
+        lines = fasta.strip().splitlines()
+        seq_lines = [line.strip() for line in lines if not line.startswith(">")]
+        sequence = "".join(seq_lines)
+
+        if not sequence:
+            raise ValueError("No sequence found in FASTA input.")
+
+        parsed_data = FastaParser(lib).parse(sequence)
+        serializer = HelmSerializer(lib)
+        return serializer.serialize(parsed_data)
 
 
 class Fasta2Biln(FormatTransform):
     def __call__(self, fasta: str) -> str:
-        logger.warning("FASTA to BiLN conversion not yet implemented")
-        return ""
+        # Parse the FASTA: remove headers and join sequence lines
+        lines = fasta.strip().splitlines()
+        seq_lines = [line.strip() for line in lines if not line.startswith(">")]
+        sequence = "".join(seq_lines)
+
+        if not sequence:
+            raise ValueError("No sequence found in FASTA input.")
+
+        parsed_data = FastaParser(lib).parse(sequence)
+        serializer = BilnSerializer(lib)
+        return serializer.serialize(parsed_data)
 
 
 class Smiles2Fasta(FormatTransform):
@@ -283,38 +310,59 @@ class Smiles2Biln(FormatTransform):
 
 class Helm2Fasta(FormatTransform):
     def __call__(self, helm: str) -> str:
-        logger.warning("HELM to FASTA conversion not yet implemented")
-        return ""
+        # Parse HELM notation into a structured format
+        parsed_data = HelmParser(lib).parse(helm)
+        # Serialize back to FASTA format
+        serializer = FastaSerializer(lib)
+        return serializer.serialize(parsed_data)
 
 
 class Helm2Smiles(FormatTransform):
     def __call__(self, helm: str) -> str:
-        logger.warning("HELM to SMILES conversion not yet implemented")
-        return ""
+        # Parse HELM notation into a structured format
+        parsed_data = HelmParser(lib).parse(helm)
+        mol = MolBuilder(parsed_data).build()
+        if mol is None:
+            raise ValueError(f"Failed to build molecule from HELM: {helm}")
+        return Chem.MolToSmiles(mol)
 
 
 class Helm2Biln(FormatTransform):
     def __call__(self, helm: str) -> str:
-        logger.warning("HELM to BiLN conversion not yet implemented")
-        return ""
+        # Parse HELM notation into a structured format
+        parsed_data = HelmParser(lib).parse(helm)
+        # Serialize to BiLN format
+        serializer = BilnSerializer(lib)
+        return serializer.serialize(parsed_data)
 
 
 class Biln2Fasta(FormatTransform):
     def __call__(self, biln: str) -> str:
-        logger.warning("BiLN to FASTA conversion not yet implemented")
-        return ""
+        # Parse BiLN notation into a structured format
+        parsed_data = BilnParser(lib).parse(biln)
+        # Serialize back to FASTA format
+        serializer = FastaSerializer(lib)
+        return serializer.serialize(parsed_data)
 
 
 class Biln2Smiles(FormatTransform):
     def __call__(self, biln: str) -> str:
-        logger.warning("BiLN to SMILES conversion not yet implemented")
-        return ""
+        # Parse BiLN notation into a structured format
+        parsed_data = BilnParser(lib).parse(biln)
+        # Convert to SMILES using MolBuilder
+        mol = MolBuilder(parsed_data).build()
+        if mol is None:
+            raise ValueError(f"Failed to build molecule from BiLN: {biln}")
+        return Chem.MolToSmiles(mol)
 
 
 class Biln2Helm(FormatTransform):
     def __call__(self, biln: str) -> str:
-        logger.warning("BiLN to HELM conversion not yet implemented")
-        return ""
+        # Parse BiLN notation into a structured format
+        parsed_data = BilnParser(lib).parse(biln)
+        # Serialize to HELM format
+        serializer = HelmSerializer(lib)
+        return serializer.serialize(parsed_data)
 
 
 class Mol2Fingerprint(FormatTransform):
@@ -439,5 +487,27 @@ AVALIABLE_TRANSFORM = {
 
 if __name__ == "__main__":
     fasta2smiles = Fasta2Smiles()
-    smile = fasta2smiles("ALAGGGPCR")
+    fasta2helm = Fasta2Helm()
+    fasta2biln = Fasta2Biln()
+    helm2fasta = Helm2Fasta()
+    helm2smiles = Helm2Smiles()
+    helm2biln = Helm2Biln()
+    biln2fasta = Biln2Fasta()
+    biln2smiles = Biln2Smiles()
+    biln2helm = Biln2Helm()
+
+    fasta = "ALAGGGPCR"
+
+    smile = fasta2smiles(fasta)
+    helm = fasta2helm(fasta)
+    biln = fasta2biln(fasta)
+    logger.info(f"FASTA: {fasta}")
     logger.info(f"SMILES: {smile}")
+    logger.info(f"HELM: {helm}")
+    logger.info(f"BiLN: {biln}")
+    logger.info(f"FASTA from HELM: {helm2fasta(helm)}")
+    logger.info(f"SMILES from HELM: {helm2smiles(helm)}")
+    logger.info(f"BiLN from HELM: {helm2biln(helm)}")
+    logger.info(f"FASTA from BiLN: {biln2fasta(biln)}")
+    logger.info(f"SMILES from BiLN: {biln2smiles(biln)}")
+    logger.info(f"HELM from BiLN: {biln2helm(biln)}")
