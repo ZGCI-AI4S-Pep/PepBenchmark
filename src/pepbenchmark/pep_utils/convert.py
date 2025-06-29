@@ -46,21 +46,21 @@ Example:
 # Configure logging for this module
 import numpy as np
 import torch
-from rdkit import Chem
-from rdkit.Chem import AllChem, MACCSkeys
-from transformers import AutoModel, AutoTokenizer
-
 from pepbenchmark.external.pep.builder import MolBuilder
 from pepbenchmark.external.pep.library import MonomerLibrary
 from pepbenchmark.external.pep.parsers.biln_parser import BilnParser, BilnSerializer
 from pepbenchmark.external.pep.parsers.fasta_parser import FastaParser, FastaSerializer
 from pepbenchmark.external.pep.parsers.helm_parser import HelmParser, HelmSerializer
 from pepbenchmark.utils.logging import get_logger
+from rdkit import Chem
+from rdkit.Chem import AllChem, MACCSkeys
+from transformers import AutoModel, AutoTokenizer
 
 logger = get_logger()
 
 lib = MonomerLibrary.from_sdf_file(
-    "test_library", "src/pepbenchmark/external/pep/resources/monomers.sdf"
+    "test_library",
+    "E:/pycharm/PepBenchmark/src/pepbenchmark/external/pep/resources/monomers.sdf",
 )
 
 
@@ -467,22 +467,23 @@ class Sequence2Embedding(FormatTransform):
 
 
 AVALIABLE_TRANSFORM = {
-    ("fasta", "smiles"): Fasta2Smiles(),
-    ("fasta", "helm"): Fasta2Helm(),
-    ("fasta", "biln"): Fasta2Biln(),
-    ("smiles", "fasta"): Smiles2Fasta(),
-    ("smiles", "helm"): Smiles2Helm(),
-    ("smiles", "biln"): Smiles2Biln(),
-    ("helm", "fasta"): Helm2Fasta(),
-    ("helm", "smiles"): Helm2Smiles(),
-    ("helm", "biln"): Helm2Biln(),
-    ("biln", "fasta"): Biln2Fasta(),
-    ("biln", "smiles"): Biln2Smiles(),
-    ("biln", "helm"): Biln2Helm(),
-    ("mol", "fingerprint"): Mol2Fingerprint(),
-    ("mol", "embedding"): Mol2Embedding(),
-    ("smiles", "fingerprint"): Mol2Fingerprint(),
-    ("smiles", "embedding"): Mol2Embedding(),
+    ("fasta", "smiles"): Fasta2Smiles,
+    ("fasta", "helm"): Fasta2Helm,
+    ("fasta", "biln"): Fasta2Biln,
+    ("fasta", "embedding"): Fasta2Embedding,
+    ("smiles", "fasta"): Smiles2Fasta,
+    ("smiles", "helm"): Smiles2Helm,
+    ("smiles", "biln"): Smiles2Biln,
+    ("helm", "fasta"): Helm2Fasta,
+    ("helm", "smiles"): Helm2Smiles,
+    ("helm", "biln"): Helm2Biln,
+    ("biln", "fasta"): Biln2Fasta,
+    ("biln", "smiles"): Biln2Smiles,
+    ("biln", "helm"): Biln2Helm,
+    ("mol", "fingerprint"): Mol2Fingerprint,
+    ("mol", "embedding"): Mol2Embedding,
+    ("smiles", "fingerprint"): Smiles2FP,
+    ("smiles", "embedding"): Mol2Embedding,
 }
 
 if __name__ == "__main__":

@@ -16,6 +16,7 @@
 from typing import Dict, List, Union
 
 import numpy as np
+from pepbenchmark.utils.logging import get_logger
 from scipy.stats import pearsonr, spearmanr
 from sklearn.metrics import (
     accuracy_score,
@@ -29,8 +30,6 @@ from sklearn.metrics import (
     recall_score,
     roc_auc_score,
 )
-
-from pepbenchmark.utils.logging import get_logger
 
 logger = get_logger()
 # Classification metrics dictionary
