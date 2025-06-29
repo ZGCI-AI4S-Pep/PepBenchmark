@@ -13,21 +13,23 @@
 # limitations under the License.
 
 import os
-import subprocess
 import tempfile
 
 import numpy
 import pandas as pd
-from base_spliter import BaseSplitter
-from Bio import SeqIO
-from Bio.Seq import Seq
-from Bio.SeqRecord import SeqRecord
+from pepbenchmark.pep_utils.mmseq2 import (
+    parse_cluster_tsv,
+    run_mmseqs_clustering,
+    save_fasta,
+)
 from pepbenchmark.utils.logging import get_logger
+
+from .base_spliter import BaseSplitter
 
 logger = get_logger()
 
 
-class MMseqs2Cluster(BaseSplitter):
+class MMseqs2Spliter(BaseSplitter):
     def run(self, data, identity):
         with tempfile.TemporaryDirectory() as tmp_root:
             input_fasta = os.path.join(tmp_root, "input.fasta")
@@ -36,11 +38,9 @@ class MMseqs2Cluster(BaseSplitter):
 
             # Save the input data to a FASTA file
 
-            self._save_fasta(data, input_fasta)
-            tsv_path = self._run_mmseqs_clustering(
-                input_fasta, output_dir, tmp_dir, identity
-            )
-            cluster_map = self._parse_cluster_tsv(tsv_path)
+            save_fasta(data, input_fasta)
+            tsv_path = run_mmseqs_clustering(input_fasta, output_dir, tmp_dir, identity)
+            cluster_map = parse_cluster_tsv(tsv_path)
             self._print_cluster_stats(cluster_map)
 
             return cluster_map
@@ -82,13 +82,13 @@ class MMseqs2Cluster(BaseSplitter):
                 test_ids.extend(members)
                 count_test += len(members)
 
-        # Create a mapping from sequence ID to index
-        id_to_idx = {f"seq{i}": i for i in range(len(data))}
         logger.info(f"""Finish clustering and splitting data.
                     \nTarget train data size: {train_data_size}, Train: {len(train_ids)}
                     \nTarget valid data size：{valid_data_size}， Valid: {len(valid_ids)}
                     \nTarget test data size：{test_data_size}, Test: {len(test_ids)}""")
 
+        # Create a mapping from sequence ID to index
+        id_to_idx = {f"seq{i}": i for i in range(len(data))}
         return {
             "train": [id_to_idx[x] for x in train_ids if x in id_to_idx],
             "valid": [id_to_idx[x] for x in valid_ids if x in id_to_idx],
@@ -118,76 +118,8 @@ class MMseqs2Cluster(BaseSplitter):
             spit_results[f"seed_{i}"] = split_indices
         return spit_results
 
-    def _save_fasta(self, df, path):
-        records = [
-            SeqRecord(Seq(seq), id=f"seq{i}", description="")
-            for i, seq in enumerate(df["sequence"])
-        ]
-        SeqIO.write(records, path, "fasta")
-
-    def _run_mmseqs_clustering(
-        self, input_fasta: str, output_dir: str, tmp_dir: str, identity: float
-    ):
-        os.makedirs(output_dir, exist_ok=True)
-        os.makedirs(tmp_dir, exist_ok=True)
-
-        db = os.path.join(output_dir, "db")
-        result = os.path.join(output_dir, "result")
-
-        subprocess.run(["mmseqs", "createdb", input_fasta, db], check=True)
-
-        subprocess.run(
-            [
-                "mmseqs",
-                "cluster",
-                db,
-                result,
-                tmp_dir,
-                "--min-seq-id",
-                str(identity),
-                "-c",
-                "0.25",
-                "-s",
-                "10",
-                "--alignment-mode",
-                "3",
-                "--seq-id-mode",
-                "1",
-                "--mask",
-                "0",
-                "--cov-mode",
-                "2",
-            ],
-            check=True,
-        )
-
-        subprocess.run(
-            [
-                "mmseqs",
-                "createtsv",
-                db,
-                db,
-                result,
-                os.path.join(output_dir, "cluster_map.tsv"),
-            ],
-            check=True,
-        )
-
-        return os.path.join(output_dir, "cluster_map.tsv")
-
-    def _parse_cluster_tsv(self, tsv_path):
-        cluster_dict = {}
-        with open(tsv_path, "r") as f:
-            for line in f:
-                rep, member = line.strip().split("\t")
-                if rep not in cluster_dict:
-                    cluster_dict[rep] = []
-                cluster_dict[rep].append(member)
-        return cluster_dict
-
     def _print_cluster_stats(self, cluster_map):
-        logger.info(f"Total clusters: {len(cluster_map)}")
-
+        log_message = f"Total clusters: {len(cluster_map)}\n"
         cluster_sizes = [len(members) for members in cluster_map.values()]
 
         bins = {
@@ -210,9 +142,10 @@ class MMseqs2Cluster(BaseSplitter):
             else:
                 bins["size 20+"] += 1
 
-        logger.info("Cluster size distribution:")
+        log_message += "Cluster size distribution:\n"
         for label, count in bins.items():
-            logger.info(f"  {label}: {count} clusters")
+            log_message += f"  {label}: {count} clusters\n"
+        logger.info(log_message)
 
 
 if __name__ == "__main__":
@@ -225,7 +158,7 @@ if __name__ == "__main__":
     os.makedirs(f"{dataset_name}", exist_ok=True)
     df = pd.read_csv(path + "/combine.csv")
 
-    split = MMseqs2Cluster()
+    split = MMseqs2Spliter()
     split_result = split.get_split_kfold_indices(
         df,
         n_splits=5,
