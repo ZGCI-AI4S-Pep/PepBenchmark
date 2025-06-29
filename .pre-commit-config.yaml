@@ -1,4 +1,4 @@
-exclude: 'examples'  # Exclude the examples folder (supports regex)
+exclude: '^(examples|src/pepbenchmark/external)/'
 default_language_version:
   python: python3
 
