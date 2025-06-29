@@ -26,7 +26,9 @@ from torch.utils.data import Dataset
 logger = get_logger()
 
 AVALIABLE_DATASET = list(DATASET_MAP.keys())
-BASE_URL = "https://raw.githubusercontent.com/ZGCI-AI4S-Pep/peptide_data/main/"
+BASE_URL = (
+    "https://raw.githubusercontent.com/ZGCI-AI4S-Pep/peptide_data/blob/wry/new_data/"
+)
 # Supported official feature types.
 OFFICIAL_FEATURE_TYPES = {
     "fasta",
@@ -402,6 +404,23 @@ class SingleTaskDatasetManager(object):
 
         else:
             raise ValueError(f"Unsupported format: {format}")
+
+    def set_remain_feature(self, remain_index: List[int]):
+        """Set remain feature by remain_index after removing redundant sequences."""
+        remain_official_feature = {}
+        remain_user_feature = {}
+        for feature_name, feature_data in self.official_feature_dict.items():
+            remain_official_feature[feature_name] = feature_data.loc[
+                remain_index
+            ].reset_index(drop=True)
+        for feature_name, feature_data in self.user_feature_dict.items():
+            remain_user_feature[feature_name] = feature_data.loc[
+                remain_index
+            ].reset_index(drop=True)
+        self.official_feature_dict = remain_official_feature
+        self.user_feature_dict = remain_user_feature
+        self.length = len(remain_index)
+        logger.info("Set remain feature successfully")
 
     def __len__(self) -> int:
         """Returns the length of the dataset."""

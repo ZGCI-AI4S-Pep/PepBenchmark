@@ -25,7 +25,7 @@ logger = get_logger()
 
 def save_fasta(fasta, path):
     records = [
-        SeqRecord(Seq(seq), id=f"seq{i}", description="") for i, seq in enumerate(fasta)
+        SeqRecord(Seq(seq), id=f"seq{i}", description="") for i, seq in fasta.items()
     ]
     SeqIO.write(records, path, "fasta")
 
