@@ -19,10 +19,9 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 import numpy as np
 import pandas as pd
 import requests
-from torch.utils.data import Dataset
-
 from pepbenchmark.metadata import DATASET_MAP
 from pepbenchmark.utils.logging import get_logger
+from torch.utils.data import Dataset
 
 logger = get_logger()
 
