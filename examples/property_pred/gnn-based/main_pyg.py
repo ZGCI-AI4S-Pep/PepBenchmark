@@ -115,12 +115,12 @@ def main():
                         help='number of epochs to train (default: 100)')
     parser.add_argument('--num_workers', type=int, default=0,
                         help='number of workers (default: 0)')
-    parser.add_argument('--dataset', type=str, default="DLAD_BioDADPep",
+    parser.add_argument('--dataset', type=str, default="Aox_APML",
                         help='dataset name (default: ogbg-molhiv)')
-    parser.add_argument('--activity', type=str, default='ADME',
+    parser.add_argument('--activity', type=str, default='Theraputic-Other',
                         help='activity type (default: ADME)')
     parser.add_argument('--model_list', type=list, default=['gcn','gin','gat','transformer'],
-                        help='activity type (default: ADME)')
+                        help='choose detection model from gcn, gin, gat, transformer (default: [gcn, gin, gat, transformer])')
     parser.add_argument('--is_smiles', type=bool, default=True,
                         help='if the dataset is in smiles format (default: False)')
 
@@ -132,15 +132,14 @@ def main():
 
     device = torch.device("cuda:" + str(args.device)) if torch.cuda.is_available() else torch.device("cpu")
 
-    for i in ('Random1','Random2','Random3','Random4','Random5','Homology_based1','Homology_based2','Homology_based3','Homology_based4','Homology_based5'):
+    for i in ('random1','random2','random3','random4','random5','mmseqs21','mmseqs22','mmseqs23','mmseqs24','mmseqs25'):
 
         ### automatic dataloading and splitting
-        tsmiles, tlabels = datasets("/data0/data_share/peptide_dataset/processed_2025.6.06v/"+args.activity+"/"+args.dataset+"/"+i[:-1]+"_split/random"+i[-1]+"/train.csv")  # Replace with your actual file path
-        train_dataset = PeptideDataset(tsmiles, tlabels)
-        vsmiles, vlabels = datasets("/data0/data_share/peptide_dataset/processed_2025.6.06v/"+args.activity+"/"+args.dataset+"/"+i[:-1]+"_split/random"+i[-1]+"/valid.csv")  # Replace with your actual file path
-        valid_dataset = PeptideDataset(vsmiles, vlabels)
-        tesmiles, telabels = datasets("/data0/data_share/peptide_dataset/processed_2025.6.06v/"+args.activity+"/"+args.dataset+"/"+i[:-1]+"_split/random"+i[-1]+"/test.csv")  # Replace with your actual file path
-        test_dataset = PeptideDataset(tesmiles, telabels)
+        root_path = "/data0/data_share/peptide_data_2025.6.27v/"+args.activity+"/"+args.dataset+"/"  # Replace with your actual file path
+        smiles, labels = datasets(root_path, args.is_smiles)  # Replace with your actual file path
+        train_dataset = PeptideDataset(smiles, labels, root_path+i[:-1]+'_split.json', 'seed_'+i[-1], 'train','./graph_data/'+args.activity+"/"+args.dataset+"/")
+        valid_dataset = PeptideDataset(smiles, labels, root_path+i[:-1]+'_split.json', 'seed_'+i[-1], 'valid','./graph_data/'+args.activity+"/"+args.dataset+"/")
+        test_dataset = PeptideDataset(smiles, labels, root_path+i[:-1]+'_split.json', 'seed_'+i[-1], 'test','./graph_data/'+args.activity+"/"+args.dataset+"/")
 
         for j in args.model_list:
             temp_best_train = None
