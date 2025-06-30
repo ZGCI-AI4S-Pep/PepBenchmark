@@ -401,6 +401,14 @@ DATASET_MAP = {
         "group": "Tox",
         "format": "FASTA",
     },
+    "multitask_peptidepedia": {
+        "path": os.path.join(DATA_DIR, "multitask_peptidepedia"),
+        "type": "binary_classification",
+        "num_class": 1,
+        "nature": "natural",
+        "description": "Activity peptides from PeptidePedia",
+        "format": "FASTA",
+    },
 }
 
 
