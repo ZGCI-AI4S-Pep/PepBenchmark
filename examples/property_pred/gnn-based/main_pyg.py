@@ -123,6 +123,8 @@ def main():
                         help='choose detection model from gcn, gin, gat, transformer (default: [gcn, gin, gat, transformer])')
     parser.add_argument('--is_smiles', type=bool, default=True,
                         help='if the dataset is in smiles format (default: False)')
+    parser.add_argument('--splits', type=list, default=['random1','random2','random3','random4','random5','mmseqs21','mmseqs22','mmseqs23','mmseqs24','mmseqs25'],
+                        help='which splits to use')
 
     parser.add_argument('--feature', type=str, default="full",
                         help='full feature or simple feature')
@@ -131,12 +133,12 @@ def main():
     args = parser.parse_args()
 
     device = torch.device("cuda:" + str(args.device)) if torch.cuda.is_available() else torch.device("cpu")
-
-    for i in ('random1','random2','random3','random4','random5','mmseqs21','mmseqs22','mmseqs23','mmseqs24','mmseqs25'):
-
+    
+    root_path = "/data0/data_share/peptide_data_2025.6.27v/"+args.activity+"/"+args.dataset+"/"  # Replace with your actual file path
+    smiles, labels = datasets(root_path, args.is_smiles)  # Replace with your actual file path
+    
+    for i in args.splits:
         ### automatic dataloading and splitting
-        root_path = "/data0/data_share/peptide_data_2025.6.27v/"+args.activity+"/"+args.dataset+"/"  # Replace with your actual file path
-        smiles, labels = datasets(root_path, args.is_smiles)  # Replace with your actual file path
         train_dataset = PeptideDataset(smiles, labels, root_path+i[:-1]+'_split.json', 'seed_'+i[-1], 'train','./graph_data/'+args.activity+"/"+args.dataset+"/")
         valid_dataset = PeptideDataset(smiles, labels, root_path+i[:-1]+'_split.json', 'seed_'+i[-1], 'valid','./graph_data/'+args.activity+"/"+args.dataset+"/")
         test_dataset = PeptideDataset(smiles, labels, root_path+i[:-1]+'_split.json', 'seed_'+i[-1], 'test','./graph_data/'+args.activity+"/"+args.dataset+"/")
