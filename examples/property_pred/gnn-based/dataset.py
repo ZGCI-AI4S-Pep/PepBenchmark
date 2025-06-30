@@ -5,6 +5,8 @@ from tqdm import tqdm
 from torch_geometric.data import Dataset, Data
 from torch_geometric.loader import DataLoader
 import torch
+import json
+import os
 
 def seq_to_mol(sequence):
     """Convert peptide sequence to RDKit Mol object"""
@@ -25,16 +27,13 @@ def process_sequence(sequence):
 
 def datasets(f_path, is_smiles=False):
     if is_smiles:
-        fasta = pd.read_csv(f_path, sep="\t", header=None, names=["SMILES"])
-        # ccc = 0
+        fasta = pd.read_csv(f_path+'smiles.csv', sep="\t", header=None, names=["feature"])
+        all_label = pd.read_csv(f_path+'label.csv', sep="\t", header=None, names=["label"])
         smiles = []
         labels = []
-        for seq in tqdm(fasta["SMILES"][1:]):
-            # if ccc < 60:
-                # print(ccc, seq.split(',')[2],seq.split(',')[1])
-            smiles.append(seq.split(',')[2])
-            labels.append(int(seq.split(',')[1]))
-            # ccc += 1
+        for seq in tqdm(range(len(fasta["feature"][1:]))):
+            smiles.append(fasta["feature"][seq+1])
+            labels.append(float(all_label["label"][seq+1]))
     else:
         fasta = pd.read_csv(f_path, sep="\t", header=None, names=["sequence"])
         # labels = pd.read_csv(f_path, sep="\t", header=None, names=["label"])
@@ -49,21 +48,40 @@ def datasets(f_path, is_smiles=False):
     return smiles, labels
 
 class PeptideDataset(Dataset):
-    def __init__(self, smiles, labels):
+    def __init__(self, smiles, labels, partition, seed, mode, gpath):
         super(PeptideDataset, self).__init__()
         self.smiles = smiles
+        # print(labels)
         self.labels = torch.tensor(labels)
+        print(partition)
+        with open(partition,'r') as f:
+            self.partition = json.load(f)[seed][mode]
+        self.gpath = gpath
         self._process()
 
+
     def _process(self):
-        self.graphs = []
-        for i in tqdm(range(len(self.smiles))):
-            graph_data = smiles2graph(self.smiles[i])
-            if graph_data and self.labels[i] is not None:
-                # print(graph_data['edge_feat'])
-                graph = Data(x=torch.from_numpy(graph_data['node_feat']),edge_index=torch.from_numpy(graph_data['edge_index']), edge_attr=torch.from_numpy(graph_data['edge_feat']))
-                graph.y = self.labels[i]
-                self.graphs.append(graph)
+        if os.path.exists(self.gpath+'graphs.pt'):
+            print(f'Loading graphs from {self.gpath}')
+            self.all_graphs = torch.load(self.gpath+'graphs.pt')
+        else:
+            print(f'Processing graphs and saving to {self.gpath}')
+            self.all_graphs = []
+            for i in tqdm(range(len(self.smiles))):
+                graph_data = smiles2graph(self.smiles[i])
+                if graph_data and self.labels[i] is not None:
+                    graph = Data(
+                        x=torch.from_numpy(graph_data['node_feat']),
+                        edge_index=torch.from_numpy(graph_data['edge_index']),
+                        edge_attr=torch.from_numpy(graph_data['edge_feat'])
+                    )
+                    graph.y = self.labels[i]
+                else:
+                    graph = None
+                self.all_graphs.append(graph)
+            os.makedirs(os.path.dirname(self.gpath), exist_ok=True)
+            torch.save(self.all_graphs, self.gpath+'graphs.pt')
+        self.graphs = [self.all_graphs[i] for i in self.partition if self.all_graphs[i] is not None]
                 
 
     def len(self):
