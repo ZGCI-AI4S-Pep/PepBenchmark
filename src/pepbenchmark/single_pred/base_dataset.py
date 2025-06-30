@@ -19,6 +19,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 import numpy as np
 import pandas as pd
 import requests
+import torch
 from torch.utils.data import Dataset
 
 from pepbenchmark.metadata import DATASET_MAP
@@ -166,7 +167,7 @@ class SingleTaskDatasetManager(object):
         elif file_extention == "npz":
             feature = np.load(feature_path)["data"]
         elif file_extention == "pt":
-            pass
+            feature = torch.load(feature_path)
         elif file_extention == "json":
             with open(feature_path, "r") as f:
                 feature = json.load(f)
