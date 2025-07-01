@@ -14,7 +14,9 @@
 
 import os
 import subprocess
+from typing import Dict, List
 
+import pandas as pd
 from Bio import SeqIO
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
@@ -23,16 +25,23 @@ from pepbenchmark.utils.logging import get_logger
 logger = get_logger()
 
 
-def save_fasta(fasta, path):
+def save_fasta(fasta: pd.Series, path: str) -> None:
+    """
+    Save a pandas Series of sequences to a FASTA file.
+
+    Args:
+        fasta: pandas.Series, where index is ID and value is sequence.
+        path: Output FASTA file path.
+    """
     records = [
-        SeqRecord(Seq(seq), id=f"seq{i}", description="") for i, seq in fasta.items()
+        SeqRecord(Seq(seq), id=str(idx), description="") for idx, seq in fasta.items()
     ]
     SeqIO.write(records, path, "fasta")
 
 
 def run_mmseqs_clustering(
     input_fasta: str, output_dir: str, tmp_dir: str, identity: float
-):
+) -> str:
     os.makedirs(output_dir, exist_ok=True)
     os.makedirs(tmp_dir, exist_ok=True)
 
@@ -81,7 +90,7 @@ def run_mmseqs_clustering(
     return os.path.join(output_dir, "cluster_map.tsv")
 
 
-def parse_cluster_tsv(tsv_path):
+def parse_cluster_tsv(tsv_path: str) -> Dict[str, List[str]]:
     cluster_dict = {}
     with open(tsv_path, "r") as f:
         for line in f:

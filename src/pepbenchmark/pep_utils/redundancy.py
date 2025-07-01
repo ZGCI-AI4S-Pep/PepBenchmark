@@ -14,6 +14,7 @@
 
 import os
 import tempfile
+from typing import List
 
 import pandas as pd
 from pepbenchmark.pep_utils.mmseq2 import (
@@ -26,10 +27,10 @@ logger = get_logger()
 
 
 class RedundancyFilter:
-    def __init__(self, identity):
+    def __init__(self, identity: float):
         self.identity = identity
 
-    def __call__(self, fasta, label):
+    def __call__(self, fasta: pd.Series, label: pd.Series) -> List[int]:
         assert len(fasta) == len(label), "Fasta and label must be of same length"
         self.origin_length = len(fasta)
         df = pd.concat([fasta, label], axis=1)
@@ -47,7 +48,9 @@ class RedundancyFilter:
         self._calculate()
         return self.remain_index
 
-    def _dedup_and_get_index(self, df: pd.DataFrame, label: str, root_dir: str):
+    def _dedup_and_get_index(
+        self, df: pd.DataFrame, label: str, root_dir: str
+    ) -> List[int]:
         tmp_dir = os.path.join(root_dir, f"{label}_tmp")
         os.makedirs(tmp_dir, exist_ok=True)
 
@@ -68,7 +71,7 @@ class RedundancyFilter:
         remain_index = [int(rid.replace("seq", "")) for rid in rep_ids]
         return remain_index
 
-    def _calculate(self):
+    def _calculate(self) -> None:
         remain_ratio = self.remain_length / self.origin_length
         logger.info(
             f"Redundancy filter: {remain_ratio:.2f} of the original data remains"
