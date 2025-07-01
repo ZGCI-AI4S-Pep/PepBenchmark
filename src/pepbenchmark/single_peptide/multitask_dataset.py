@@ -14,7 +14,7 @@
 
 import os
 from collections import defaultdict
-from typing import Any, Dict, List, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
@@ -24,7 +24,7 @@ from pepbenchmark.pep_utils.neg_sample import MultiTaskNegSampler
 from pepbenchmark.utils.logging import get_logger
 from torch.utils.data import Dataset
 
-from src.pepbenchmark.single_pred.base_dataset import DatasetManager
+from src.pepbenchmark.single_peptide.base_dataset import DatasetManager
 
 logger = get_logger()
 
@@ -37,7 +37,9 @@ class MultiTaskDatasetManager(DatasetManager):
     def __init__(
         self,
         dataset_name: str = "multitask_peptidepedia",
-        labels: List[str] = None,  # activity names, et.al. []
+        labels: Optional[
+            List[str]
+        ] = None,  # activity names, et.al. ["Antibacterial", "Antiviral"]
         dataset_dir: str = None,
         force_download: bool = False,
     ):
@@ -47,7 +49,11 @@ class MultiTaskDatasetManager(DatasetManager):
             force_download=force_download,
         )
 
-        # TODO: if labels is None:
+        if not labels:
+            raise ValueError(
+                f"The labels parameter must be defined as a list of strings."
+                f" Please choose one or more labels from {LABEL_TYPE}."
+            )
 
         self._check_label_name(labels)
         self.labels = labels
@@ -63,6 +69,7 @@ class MultiTaskDatasetManager(DatasetManager):
         if not_in_official:
             raise ValueError(
                 f"Label names {not_in_official} not found in the official label list."
+                f" Please choose one or more labels from {LABEL_TYPE}."
             )
         return True
 
@@ -126,9 +133,7 @@ class MultiTaskDatasetManager(DatasetManager):
             feature_name: Name of the user-defined feature.
             feature_data: Data for the user-defined feature.
         """
-        if feature_name in self.user_feature_dict:
-            logger.info(f"User feature {feature_name} already exists in dataset")
-            return
+
         if self.length is None:
             self.length = len(feature_data)
         assert (

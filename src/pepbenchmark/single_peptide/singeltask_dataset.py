@@ -21,8 +21,7 @@ import pandas as pd
 import requests
 import torch
 from pepbenchmark.metadata import DATASET_MAP
-from pepbenchmark.pep_utils.neg_sample import NegSampler
-from pepbenchmark.single_pred.base_dataset import DatasetManager
+from pepbenchmark.single_peptide.base_dataset import DatasetManager
 from pepbenchmark.utils.logging import get_logger
 from torch.utils.data import Dataset
 
@@ -265,33 +264,30 @@ class SingleTaskDatasetManager(DatasetManager):
             logger.error(f"Failed to download {feature_name}: {e}")
             raise
 
-    def negative_sampling(self, ratio: int, **kwargs):
+    def set_negative_samples(self, neg_seqs: List[str]):
         """
         Removes original negative samples, then re-samples negatives and adds them back.
 
         Args:
-            sampler: NegSampler instance.
-            ratio (int): Number of negative samples per positive sample.
-            **kwargs: random seed
+            neg_seqs: List of negative sequences.
         """
-        seed = kwargs.get("seed", 42)
         if (
             "fasta" not in self.official_feature_dict
             or "label" not in self.official_feature_dict
         ):
-            raise ValueError("Must contain 'fasta' and 'label' features.")
-        sampler = NegSampler(self.dataset_name)
+            raise ValueError(
+                "Dataset must set official 'fasta' and 'label' features first."
+            )
+
         fasta_list = self.get_official_feature("fasta")
         label_list = self.get_official_feature("label")
         pos_seqs = [seq for seq, label in zip(fasta_list, label_list) if label == 1]
-        neg_seqs = sampler(pos_seqs, ratio, seed)
         augmented_fasta = pd.Series(pos_seqs + neg_seqs)
         augmented_label = pd.Series([1] * len(pos_seqs) + [0] * len(neg_seqs))
 
         self.official_feature_dict["fasta"] = augmented_fasta
         self.official_feature_dict["label"] = augmented_label
         self.length = len(augmented_fasta)
-        logger.info(f"Negative sampling with ratio {ratio} successfully, ")
 
         official_remain = [
             k for k in self.official_feature_dict.keys() if k not in ("fasta", "label")
@@ -299,15 +295,13 @@ class SingleTaskDatasetManager(DatasetManager):
         if official_remain:
             for feature_name in official_remain:
                 self.remove_official_feature(feature_name)
-            logger.info(
-                f"Official features {official_remain} need to be recomputed after negative sampling."
-            )
+            logger.info(f"Official features {official_remain} need to be recomputed.")
 
         if self.user_feature_dict:
             for key in list(self.user_feature_dict.keys()):
                 self.remove_user_feature(key)
             logger.info(
-                f"User features {list(self.user_feature_dict.keys())} need to be recomputed after negative sampling."
+                f"User features {list(self.user_feature_dict.keys())} need to be recomputed."
             )
 
     def set_official_split_indices(
@@ -425,6 +419,7 @@ class SingleTaskDatasetManager(DatasetManager):
                     self.features = features
 
                 def __len__(self):
+                    # Return the length of the first feature, which is the number of data points
                     return len(next(iter(self.features.values())))
 
                 def __getitem__(self, idx):
