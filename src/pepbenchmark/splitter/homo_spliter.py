@@ -113,6 +113,7 @@ class MMseqs2Spliter(BaseSplitter):
                 frac_train,
                 frac_valid,
                 frac_test,
+                identity,
                 seed=seed + i if seed is not None else None,
             )
             spit_results[f"seed_{i}"] = split_indices
