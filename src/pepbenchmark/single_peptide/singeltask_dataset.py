@@ -20,10 +20,11 @@ import numpy as np
 import pandas as pd
 import requests
 import torch
+from torch.utils.data import Dataset
+
 from pepbenchmark.metadata import DATASET_MAP
 from pepbenchmark.single_peptide.base_dataset import DatasetManager
 from pepbenchmark.utils.logging import get_logger
-from torch.utils.data import Dataset
 
 logger = get_logger()
 
@@ -39,8 +40,8 @@ OFFICIAL_FEATURE_TYPES = {
     "biln",
     "ecfp",
     "ramdom_split",
+    "mmseqs2_split",
     "graph",
-    "random_split",
     "label",
 }
 
@@ -55,6 +56,7 @@ FEATURE_FILE_EXTENTION_MAP = {
     "esm2_150_embedding": "npz",
     "graph": ".pt",
     "random_split": "json",
+    "mmseqs2_split": "json",
     "label": "csv",
 }
 
@@ -224,6 +226,19 @@ class SingleTaskDatasetManager(DatasetManager):
                 f"Feature {feature_name} not found in dataset, cannot remove"
             )
 
+    def get_feature_names(self) -> List[str]:
+        """Retrieves the names of all features in the dataset.
+
+        Returns:
+            A list of feature names.
+        """
+        # 分别添加official 和 user 前缀
+        official_feature_names = [
+            f"official_{name}" for name in self.official_feature_dict.keys()
+        ]
+        user_feature_names = [f"user_{name}" for name in self.user_feature_dict.keys()]
+        return official_feature_names + user_feature_names
+
     def remove_user_feature(self, feature_name: str) -> None:
         """Removes a user-defined feature from the dataset.
 
@@ -254,12 +269,15 @@ class SingleTaskDatasetManager(DatasetManager):
         logger.info(
             f"Downloading ==={self.dataset_name}/{feature_name}.{file_extention}=== from {url}"
         )
+        headers = {"User-Agent": "Mozilla/5.0"}
+
         try:
-            with requests.get(url, stream=True, timeout=100) as r:
+            with requests.get(url, stream=True, timeout=100, headers=headers) as r:
                 r.raise_for_status()
                 with open(feature_path, "wb") as f:
                     for chunk in r.iter_content(chunk_size=8192):
-                        f.write(chunk)
+                        if chunk:
+                            f.write(chunk)
         except requests.RequestException as e:
             logger.error(f"Failed to download {feature_name}: {e}")
             raise
@@ -456,3 +474,27 @@ class SingleTaskDatasetManager(DatasetManager):
         if self.length is None:
             raise ValueError("Dataset length is not set. Please load features first.")
         return self.length
+
+    def __getitem__(self, idx: int) -> Dict[str, Any]:
+        """Retrieves a single data sample by index.
+
+        Args:
+            idx: Index of the data sample to retrieve.
+
+        Returns:
+            A dictionary containing the features for the specified index.
+        """
+        if self.length is None:
+            raise ValueError("Dataset length is not set. Please load features first.")
+        if idx < 0 or idx >= self.length:
+            raise IndexError(
+                f"Index {idx} out of bounds for dataset of length {self.length}"
+            )
+
+        sample = {}
+        for feature_name, feature_data in self.official_feature_dict.items():
+            sample[f"official_{feature_name}"] = feature_data[idx]
+        for feature_name, feature_data in self.user_feature_dict.items():
+            sample[f"user_{feature_name}"] = feature_data[idx]
+
+        return sample

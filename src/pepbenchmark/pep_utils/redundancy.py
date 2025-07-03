@@ -17,6 +17,7 @@ import tempfile
 from typing import List
 
 import pandas as pd
+
 from pepbenchmark.pep_utils.mmseq2 import (
     run_mmseqs_clustering,
     save_fasta,
