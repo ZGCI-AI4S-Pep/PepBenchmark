@@ -55,6 +55,8 @@ from pepbenchmark.utils.logging import get_logger
 from rdkit import Chem
 from rdkit.Chem import AllChem, MACCSkeys
 from transformers import AutoModel, AutoTokenizer
+from ogb.utils import smiles2graph
+from torch_geometric.data import Data
 
 logger = get_logger()
 
@@ -464,6 +466,36 @@ class Sequence2Embedding(FormatTransform):
 
         # Return as NumPy array on CPU
         return embedding.cpu().numpy()
+    
+
+class Smiles2Graph(FormatTransform):
+    def __call__(self, smiles: str, label: torch.Tensor = None) -> dict:
+        """
+        Convert a SMILES string to a graph representation.
+
+        Args:
+            smiles: SMILES string of the molecule.
+            label: Optional label tensor for the graph.
+
+        Returns:
+            dict: Graph representation with nodes and edges.
+        """
+        # Convert SMILES to graph format by ogb
+        graph_data = smiles2graph(smiles)
+
+        # Create a PyTorch Geometric Data object
+        graph = Data(
+            x=torch.from_numpy(graph_data['node_feat']),
+            edge_index=torch.from_numpy(graph_data['edge_index']),
+            edge_attr=torch.from_numpy(graph_data['edge_feat'])
+        )
+
+        # If a label is provided, assign it to the graph
+        if label is not None:
+            graph.y = label
+        
+        # Return the graph object on CPU
+        return graph
 
 
 AVALIABLE_TRANSFORM = {
@@ -484,6 +516,7 @@ AVALIABLE_TRANSFORM = {
     ("mol", "embedding"): Mol2Embedding,
     ("smiles", "fingerprint"): Smiles2FP,
     ("smiles", "embedding"): Mol2Embedding,
+    ("smiles", "graph"): Smiles2Graph,
 }
 
 if __name__ == "__main__":
