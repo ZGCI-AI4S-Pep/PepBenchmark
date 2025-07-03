@@ -55,13 +55,8 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Base directory for processed peptide datasets
-DEFAULT_DATA_DIR = os.path.expanduser(
-    "~/.pepbenchmark_cache/data_share/peptide_dataset/processed_2025.6.12v/"
-)
+DEFAULT_DATA_DIR = os.path.expanduser("~/.pepbenchmark_cache/")
 DATA_DIR = os.environ.get("PEPBENCHMARK_DATA_DIR", DEFAULT_DATA_DIR)
-
-
-logger.info(f"Dataset directory: {DATA_DIR}")
 
 
 DATASET_MAP = {

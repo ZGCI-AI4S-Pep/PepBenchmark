@@ -11,3 +11,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import os
+import sys
+
+external = os.path.expanduser(os.path.join(os.path.dirname(__file__), "external"))
+if external not in sys.path:
+    sys.path.insert(0, external)
