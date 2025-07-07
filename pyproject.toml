@@ -5,7 +5,13 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "pepbenchmark"
 version = "0.1.0"
-dependencies = []
+dependencies = [
+    "tqdm",
+    "numpy",
+    "torch",
+    "transformers",
+    "rdkit-pypi",
+]
 
 [tool.black]
 line-length = 88
@@ -35,6 +41,4 @@ exclude = [
   "dist",
   "examples",
 ]
-
-[tool.ruff.per-file-ignores]
-"__init__.py" = ["F401"]
+per-file-ignores = { "__init__.py" = ["F401"] }

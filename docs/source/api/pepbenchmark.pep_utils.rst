@@ -17,10 +17,10 @@ pepbenchmark.pep\_utils.convert module
    :undoc-members:
    :show-inheritance:
 
-pepbenchmark.pep\_utils.featurizer module
------------------------------------------
+pepbenchmark.pep\_utils.convert module
+------------------------------------
 
-.. automodule:: pepbenchmark.pep_utils.featurizer
+.. automodule:: pepbenchmark.pep_utils.convert
    :members:
    :undoc-members:
    :show-inheritance:

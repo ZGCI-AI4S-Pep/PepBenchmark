@@ -39,7 +39,7 @@ OFFICIAL_FEATURE_TYPES = {
     "helm",
     "biln",
     "ecfp",
-    "ramdom_split",
+    "random_split",
     "mmseqs2_split",
     "graph",
     "label",
@@ -153,7 +153,7 @@ class SingleTaskDatasetManager(DatasetManager):
             self._download_official_feature(feature_name)
 
         if file_extention == "csv":
-            feature = pd.read_csv(feature_path)["feature"]
+            feature = pd.read_csv(feature_path)["feature"].to_list()
         elif file_extention == "npz":
             feature = np.load(feature_path)["data"]
         elif file_extention == "pt":
@@ -498,3 +498,11 @@ class SingleTaskDatasetManager(DatasetManager):
             sample[f"user_{feature_name}"] = feature_data[idx]
 
         return sample
+
+    def get_dataset_metadata(self) -> Dict[str, Any]:
+        """Retrieves metadata for the dataset.
+
+        Returns:
+            A dictionary containing metadata such as dataset name, path, and feature types.
+        """
+        return DATASET_MAP.get(self.dataset_name, {})

@@ -1,29 +1,22 @@
 import argparse
 import os
+from tokenize import Single
 import warnings
 from curses import meta
 
 import pandas as pd
+from pepbenchmark.evaluator import evaluate_classification, evaluate_regression
+from pepbenchmark.single_pred.base_dataset import SingleTaskDatasetManager
 import wandb
-from sklearn.metrics import (
-    accuracy_score,
-    f1_score,
-    precision_recall_fscore_support,
-    precision_score,
-    recall_score,
-    roc_auc_score,
-)
 from torch.utils.data import Dataset
 from transformers import (
     AutoModelForSequenceClassification,
     AutoTokenizer,
-    BertForSequenceClassification,
     Trainer,
     TrainingArguments,
-    set_seed,
 )
+from pepbenchmark.utils.seed import set_seed
 
-from pepbenchmark.metadata import get_dataset_path
 
 warnings.filterwarnings(
     "ignore",
@@ -38,10 +31,9 @@ from transformers import EarlyStoppingCallback, Trainer, TrainingArguments
 
 from pepbenchmark.metadata import DATASET_MAP
 
-
 class SequenceDatasetWithLabels(Dataset):
-    def __init__(self, path, tokenizer, max_len=200):
-        self.sequences, self.labels = load_data(path)
+    def __init__(self, sequences,labels, tokenizer, max_len=200):
+        self.sequences, self.labels = sequences, labels
         self.tokenizer = tokenizer
         self.max_len = max_len
 
@@ -62,23 +54,6 @@ class SequenceDatasetWithLabels(Dataset):
         return len(self.sequences)
 
 
-def load_data(path):
-    """
-    Load sequences and labels from a CSV file.
-
-    Args:
-        path (str): Path to the CSV file.
-
-    Returns:
-        tuple: A tuple containing sequences and labels.
-    """
-
-    df = pd.read_csv(path)
-    sequences = df["sequence"].tolist()
-    labels = df["label"].tolist()
-    return sequences, labels
-
-
 def binary_classification_compute_metrics(pred):
     """Compute metrics for binary classification tasks."""
 
@@ -87,58 +62,9 @@ def binary_classification_compute_metrics(pred):
 
     # 分类预测（取最大概率类别）
     preds = logits.argmax(-1)
-
-    # 获取正类的概率（用于 ROC AUC）
     probs = softmax(logits, axis=-1)[:, 1]  # 取第二列，即正类的概率
-
-    return {
-        "accuracy": accuracy_score(labels, preds),
-        "precision": precision_score(labels, preds, zero_division=0),
-        "recall": recall_score(labels, preds, zero_division=0),
-        "f1": f1_score(labels, preds, zero_division=0),
-        "micro_f1": f1_score(labels, preds, average="micro"),
-        "macro_f1": f1_score(labels, preds, average="macro", zero_division=0),
-        "roc_auc": roc_auc_score(labels, probs),
-    }
-
-
-def multi_class_classification_compute_metrics(pred):
-    """
-    Compute metrics for multi-class classification tasks, including average ROC AUC.
-    """
-    labels = pred.label_ids
-    preds = pred.predictions.argmax(-1)
-
-    acc = accuracy_score(labels, preds)
-    precision = precision_score(labels, preds, average="weighted", zero_division=0)
-    recall = recall_score(labels, preds, average="weighted", zero_division=0)
-    f1 = f1_score(labels, preds, average="weighted", zero_division=0)
-    micro_f1 = f1_score(labels, preds, average="micro", zero_division=0)
-    macro_f1 = f1_score(labels, preds, average="macro", zero_division=0)
-    # ROC AUC for multi-class: need one-hot encoding for labels
-    try:
-        n_classes = np.max(labels) + 1
-        labels_onehot = label_binarize(labels, classes=np.arange(n_classes))
-        roc_auc_ovr = roc_auc_score(
-            labels_onehot, pred.predictions, average="macro", multi_class="ovr"
-        )
-        roc_auc_ovo = roc_auc_score(
-            labels_onehot, pred.predictions, average="macro", multi_class="ovo"
-        )
-    except Exception:
-        roc_auc_ovr = None
-        roc_auc_ovo = None
-
-    return {
-        "accuracy": acc,
-        "f1": f1,
-        "precision": precision,
-        "recall": recall,
-        "micro_f1": micro_f1,
-        "macro_f1": macro_f1,
-        "roc_auc_ovr": roc_auc_ovr,
-        "roc_auc_ovo": roc_auc_ovo,
-    }
+    metrics = evaluate_classification(y_true=labels, y_pred=preds, y_score=probs)
+    return metrics
 
 
 def regression_compute_metrics(pred):
@@ -148,31 +74,8 @@ def regression_compute_metrics(pred):
     preds = pred.predictions
     labels = np.array(labels).reshape(-1)
     preds = np.array(preds).reshape(-1)
-    mse = mean_squared_error(labels, preds)
-    mae = mean_absolute_error(labels, preds)
-    rmse = np.sqrt(mean_squared_error(labels, preds))
-    r2 = r2_score(labels, preds)
-    spearman_corr, _ = spearmanr(labels, preds)
-    pcc, _ = pearsonr(labels, preds)
-
-    return {
-        "mse": mse,
-        "mae": mae,
-        "rmse": rmse,
-        "r2": r2,
-        "spearman": spearman_corr,
-        "pcc": pcc,
-    }
-
-
-model_map = {
-    "prot_bert_bfd": "Rostlab/prot_bert_bfd",
-    "esm2_150M": "facebook/esm2_t30_150M_UR50D",
-    "esm2_650M": "facebook/esm2_t33_650M_UR50D",
-    "esm2_3B": "facebook/esm2_t36_3B_UR50D",
-    "dplm_150m": "airkingbd/dplm_150m",
-    "dplm_650m": "airkingbd/dplm_650m",
-}
+    metrics = evaluate_regression(labels, preds)
+    return metrics
 
 
 def parse_args():
@@ -187,21 +90,19 @@ def parse_args():
     parser.add_argument(
         "--split_type",
         type=str,
-        default="Random_split",
-        choices=["Random_split", "Homology_based_split"],
+        default="random_split",
+        choices=["random_split", "mmseqs2_split"],
     )
     parser.add_argument(
-        "--split_index",
-        type=str,
-        default="random1",
-        choices=["random1", "random2", "random3", "random4", "random5"],
+        "--fold_seed",
+        type=int,
+        default=0,
+        choices=[0, 1, 2, 3, 4],
     )
     parser.add_argument(
         "--model_name",
         type=str,
-        default="esm2_150M",
-        choices=list(model_map.keys()),
-        help="Model name from the model map",
+        default="facebook/esm2_t30_150M_UR50D",
     )
     parser.add_argument("--output_dir", type=str, default=None)
     parser.add_argument("--num_train_epochs", type=int, default=30)
@@ -217,17 +118,20 @@ def parse_args():
     parser.add_argument("--report_to", type=str, default="all")
     parser.add_argument("--early_stopping_patience", type=int, default=5)
     parser.add_argument("--tag", type=str, default=None)
+    parser.add_argument(
+        "--save_dir",
+        type=str,
+        default="./checkpoints",
+        help="Directory to save the model checkpoints and outputs",
+    )
 
     return parser.parse_args()
 
 
-def save_predictions_and_metrics(predictions_output, prefix, output_dir, dataset):
-    """
-    保存预测结果 + 原始文本 + 标签 + 预测 + 评估指标
-    """
+def save_predictions_and_metrics(predictions_output,metrics, prefix, output_dir, dataset):
+
     preds = predictions_output.predictions
     labels = predictions_output.label_ids
-    metrics = predictions_output.metrics
 
     # 分类任务取argmax
     if preds.ndim > 1 and preds.shape[1] > 1:
@@ -235,7 +139,6 @@ def save_predictions_and_metrics(predictions_output, prefix, output_dir, dataset
     else:
         preds = preds.flatten()
 
-    # 提取原始文本（要求 dataset[i]["raw_sequence"] 存在）
     texts = [dataset[i]["raw_sequence"] for i in range(len(dataset))]
 
     df_preds = pd.DataFrame({"text": texts, "prediction": preds, "label": labels})
@@ -255,25 +158,25 @@ if __name__ == "__main__":
         raise ValueError(
             f"Task {args.task} is not supported. Please choose from {list(DATASET_MAP.keys())}."
         )
-    dataset_metadata = DATASET_MAP.get(args.task)
-    train_path = os.path.join(
-        dataset_metadata["path"], args.split_type, args.split_index, "train.csv"
-    )
-    valid_path = os.path.join(
-        dataset_metadata["path"], args.split_type, args.split_index, "valid.csv"
-    )
-    test_path = os.path.join(
-        dataset_metadata["path"], args.split_type, args.split_index, "test.csv"
-    )
+    
+
 
     set_seed(args.seed)
-    model_name = model_map[args.model_name]
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    dataset_manager = SingleTaskDatasetManager(dataset_name=args.task,official_feature_names=["fasta","label"])
+
+    dataset_manager.set_official_split_indices(
+        split_type=args.split_type, fold_seed=args.fold_seed
+    )
+
+    train_features, valid_features, test_features = dataset_manager.get_train_val_test_features(format="dict")
+
+    dataset_metadata = dataset_manager.get_dataset_metadata()
+    tokenizer = AutoTokenizer.from_pretrained(args.model_name)
     max_len = dataset_metadata.get("max_len", 200)
 
-    train_dataset = SequenceDatasetWithLabels(train_path, tokenizer, max_len=max_len)
-    valid_dataset = SequenceDatasetWithLabels(valid_path, tokenizer, max_len=max_len)
-    test_dataset = SequenceDatasetWithLabels(test_path, tokenizer, max_len=max_len)
+    train_dataset = SequenceDatasetWithLabels(train_features["official_fasta"],train_features["official_label"], tokenizer, max_len=max_len)
+    valid_dataset = SequenceDatasetWithLabels(valid_features["official_fasta"], valid_features["official_label"], tokenizer, max_len=max_len)
+    test_dataset = SequenceDatasetWithLabels(test_features["official_fasta"], test_features["official_label"], tokenizer, max_len=max_len)
 
     print(f"Train dataset size: {len(train_dataset)}")
     print(f"Valid dataset size: {len(valid_dataset)}")
@@ -281,11 +184,8 @@ if __name__ == "__main__":
 
     if args.output_dir is None:
         args.output_dir = os.path.join(
-            "checkpoints", args.task, args.split_type, model_name, args.split_index
+            args.save_dir, args.task, args.split_type, args.model_name, str(args.fold_seed)
         )
-
-    if args.tag is not None:
-        args.output_dir = os.path.join(args.output_dir, args.tag)
 
     task_type = dataset_metadata["type"]
     if task_type not in [
@@ -301,23 +201,18 @@ if __name__ == "__main__":
         num_labels = 2
         compute_metrics = binary_classification_compute_metrics
         model = AutoModelForSequenceClassification.from_pretrained(
-            model_name, num_labels=num_labels
+            args.model_name, num_labels=num_labels
         )
     elif task_type == "multi_class_classification":
-        num_labels = dataset_metadata["num_classes"]
-        model = AutoModelForSequenceClassification.from_pretrained(
-            model_name, num_labels=num_labels
-        )
-        compute_metrics = multi_class_classification_compute_metrics
+        pass
+
     elif task_type == "regression":
         num_labels = 1
         model = AutoModelForSequenceClassification.from_pretrained(
-            model_name, num_labels=num_labels
+            args.model_name, num_labels=num_labels
         )
         compute_metrics = regression_compute_metrics
 
-    # wandb.init(name=str(args.output_dir))
-    # wandb.define_metric("*", step_metric="epoch")
 
     training_args = TrainingArguments(
         output_dir=args.output_dir,
@@ -353,19 +248,21 @@ if __name__ == "__main__":
 
     # Predict and save train
     train_output = trainer.predict(train_dataset, metric_key_prefix="test_train")
-    save_predictions_and_metrics(train_output, "train", args.output_dir, train_dataset)
+    # 删除前缀
+    metrics = {k.replace("test_train_", ""): v for k, v in train_output.metrics.items()}
+    save_predictions_and_metrics(train_output, metrics,"train", args.output_dir, train_dataset)
 
     # Predict and save valid
     valid_output = trainer.predict(valid_dataset, metric_key_prefix="test_valid")
-    save_predictions_and_metrics(valid_output, "valid", args.output_dir, valid_dataset)
+    # 删除前缀
+    metrics = {k.replace("test_valid_", ""): v for k, v in valid_output.metrics.items()}
+    save_predictions_and_metrics(valid_output, metrics,"valid", args.output_dir, valid_dataset)
 
     # Predict and save test
     test_output = trainer.predict(test_dataset, metric_key_prefix="test_test")
-    save_predictions_and_metrics(test_output, "test", args.output_dir, test_dataset)
+    # 删除前缀  
+    metrics = {k.replace("test_test_", ""): v for k, v in test_output.metrics.items()}
+    save_predictions_and_metrics(test_output, metrics,"test", args.output_dir, test_dataset)
 
 
-# WANDB_PROJECT=AF_APML python finetune_plm.py --num_train_epochs 30  --load_best_model_at_end  --task AF_APML  --per_device_train_batch_size 16 --gradient_accumulation_steps 1 --learning_rate 5e-5 --early_stopping_patience 5 --weight_decay 0.0 --split_type Random_split --split_index random1 --model_name esm2_150M
-# WANDB_PROJECT=P.aeruginosa python finetune_plm.py --num_train_epochs 30  --load_best_model_at_end  --task P.aeruginosa  --per_device_train_batch_size 16 --gradient_accumulation_steps 1 --learning_rate 5e-5 --early_stopping_patience 5 --weight_decay 0.0 --split_type Random_split --split_index random1 --model_name esm2_150M
-
-
-# WANDB_PROJECT=AF_APML python finetune_plm.py --num_train_epochs 100  --load_best_model_at_end  --task AF_APML  --per_device_train_batch_size 16 --gradient_accumulation_steps 1 --learning_rate 1e-5 --early_stopping_patience 10 --weight_decay 0.0 --split_type Random_split --split_index random1 --model_name prot_bert_bfd --output_dir test_lr_0.00001
+# WANDB_PROJECT=ttt python finetune_plm.py --num_train_epochs 1  --load_best_model_at_end  --task AV_APML  --per_device_train_batch_size 16 --gradient_accumulation_steps 1 --learning_rate 5e-5 --early_stopping_patience 5 --weight_decay 0.0 --split_type random_split --fold_seed 0 --model_name facebook/esm2_t30_150M_UR50D

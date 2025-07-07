@@ -48,6 +48,13 @@ extensions = [
     # 社区扩展
     "myst_parser",  # 让 Sphinx 解析 Markdown (*.md)
 ]
+autosummary_generate = True  # 生成 autosummary stub 文件
+autodoc_default_options = {
+    "members": True,
+    "undoc-members": True,
+    "show-inheritance": True,
+}
+html_theme = "sphinx_rtd_theme"
 
 templates_path = ["_templates"]
 exclude_patterns = []
@@ -56,11 +63,3 @@ release = "1.0"
 
 # -- Options for HTML output -------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
-
-html_theme = "alabaster"
-html_static_path = ["_static"]
-source_suffix = {
-    ".rst": "restructuredtext",
-    ".txt": "markdown",
-    ".md": "markdown",
-}
