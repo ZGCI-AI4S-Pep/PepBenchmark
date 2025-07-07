@@ -20,8 +20,13 @@ from scipy.stats import pearsonr, spearmanr
 from sklearn.metrics import (
     accuracy_score,
     average_precision_score,
+    balanced_accuracy_score,
+    brier_score_loss,
     cohen_kappa_score,
+    confusion_matrix,
     f1_score,
+    log_loss,
+    matthews_corrcoef,
     mean_absolute_error,
     mean_squared_error,
     precision_score,
@@ -33,196 +38,210 @@ from sklearn.metrics import (
 from pepbenchmark.utils.logging import get_logger
 
 logger = get_logger()
-# Classification metrics dictionary
-# Maps metric names to their corresponding functions
-Classification_Metric_Map = {
+# ---------------------------------------------------------------------------
+# Helper implementations for metrics not directly shipped with scikit‑learn
+# ---------------------------------------------------------------------------
+
+
+def specificity_score(
+    y_true: Union[List, np.ndarray], y_pred: Union[List, np.ndarray]
+) -> float:
+    """Compute **specificity (true negative rate)** for *binary* classification.
+
+    Specificity = TN / (TN + FP)
+    """
+    cm = confusion_matrix(y_true, y_pred)
+    if cm.shape != (2, 2):
+        raise ValueError("specificity_score currently supports binary tasks only")
+    tn, fp, fn, tp = cm.ravel()
+    return tn / (tn + fp) if (tn + fp) else 0.0
+
+
+def g_mean_score(
+    y_true: Union[List, np.ndarray], y_pred: Union[List, np.ndarray]
+) -> float:
+    """Geometric mean of sensitivity and specificity for *binary* tasks."""
+    sensitivity = recall_score(y_true, y_pred)
+    specificity = specificity_score(y_true, y_pred)
+    return np.sqrt(sensitivity * specificity)
+
+
+# ---------------------------------------------------------------------------
+# Metric maps
+# ---------------------------------------------------------------------------
+# Classification metrics dictionary – maps *public* metric names to callables.
+Classification_Metric_Map: Dict[str, callable] = {
+    # Basic
     "accuracy": accuracy_score,
+    "balanced-accuracy": balanced_accuracy_score,
     "precision": precision_score,
     "recall": recall_score,
+    "specificity": specificity_score,
     "f1": f1_score,
-    "micro-f1": lambda y_true, y_pred: f1_score(y_true, y_pred, average="micro"),
-    "macro-f1": lambda y_true, y_pred: f1_score(y_true, y_pred, average="macro"),
+    "micro-f1": lambda yt, yp: f1_score(yt, yp, average="micro"),
+    "macro-f1": lambda yt, yp: f1_score(yt, yp, average="macro"),
+    "weighted-f1": lambda yt, yp: f1_score(yt, yp, average="weighted"),
+    # Correlation / agreement
+    "mcc": matthews_corrcoef,
+    "kappa": cohen_kappa_score,
+    # Composite / diagnostic
+    "g-mean": g_mean_score,
+    # Probability‑aware metrics
     "roc-auc": roc_auc_score,
-    "avg-roc-auc": lambda y_true, y_score: roc_auc_score(
-        y_true, y_score, average="macro", multi_class="ovr"
+    "avg-roc-auc": lambda yt, ys: roc_auc_score(
+        yt, ys, average="macro", multi_class="ovr"
     ),
     "pr-auc": average_precision_score,
-    "kappa": cohen_kappa_score,
+    "brier-score": brier_score_loss,
+    "log-loss": log_loss,
+    # Rank‑/top‑k‑based
 }
 
-# Regression metrics dictionary
-# Maps metric names to their corresponding functions
-Regression_Metric_Map = {
+# Regression metrics dictionary – maps names to functions
+Regression_Metric_Map: Dict[str, callable] = {
     "mse": mean_squared_error,
-    "rmse": lambda y_true, y_pred: mean_squared_error(y_true, y_pred, squared=False),
+    "rmse": lambda yt, yp: mean_squared_error(yt, yp, squared=False),
     "mae": mean_absolute_error,
     "r2": r2_score,
-    "pcc": lambda y_true, y_pred: pearsonr(y_true, y_pred)[0],
-    "spearman": lambda y_true, y_pred: spearmanr(y_true, y_pred)[0],
+    "pcc": lambda yt, yp: pearsonr(yt, yp)[0],
+    "spearman": lambda yt, yp: spearmanr(yt, yp)[0],
 }
+
+# ---------------------------------------------------------------------------
+# Core evaluation helpers
+# ---------------------------------------------------------------------------
 
 
 def evaluate_classification(
     y_true: Union[List, np.ndarray],
     y_pred: Union[List, np.ndarray],
-    y_score: Union[List, np.ndarray] = None,
-    metrics: List[str] = None,
+    y_score: Union[List, np.ndarray] | None = None,
+    metrics: List[str] | None = None,
 ) -> Dict[str, float]:
-    """
-    Evaluate classification performance using multiple metrics.
+    """Evaluate classification performance over *multiple* metrics.
 
-    Args:
-        y_true: True labels
-        y_pred: Predicted labels
-        y_score: Prediction scores/probabilities (required for ROC-AUC, PR-AUC)
-        metrics: List of metric names to compute. If None, computes all available.
+    Parameters
+    ----------
+    y_true : Union[List, np.ndarray]
+        Ground‑truth labels.
+    y_pred : Union[List, np.ndarray]
+        Discrete predictions (same shape as *y_true*).
+    y_score : Union[List, np.ndarray] | None, optional
+        Class‑probabilities / scores (n_samples × n_classes) required for
+        probability‑dependent metrics such as *roc‑auc* or *log‑loss*.
+    metrics : List[str] | None, optional
+        Which metrics to compute.  *None* ⇒ all available.
 
-    Returns:
-        Dictionary mapping metric names to computed values
-
-    Examples:
-        >>> y_true = [0, 1, 1, 0, 1]
-        >>> y_pred = [0, 1, 0, 0, 1]
-        >>> results = evaluate_classification(y_true, y_pred, metrics=['accuracy', 'f1'])
-        >>> print(f"Accuracy: {results['accuracy']:.3f}")
+    Returns
+    -------
+    Dict[str, float]
+        A dictionary of metric names and their computed values.
     """
     if metrics is None:
         metrics = list(Classification_Metric_Map.keys())
 
-    results = {}
+    results: Dict[str, float] = {}
 
-    for metric_name in metrics:
-        if metric_name not in Classification_Metric_Map:
-            logger.warning(f"Unknown metric '{metric_name}' skipped")
+    for name in metrics:
+        if name not in Classification_Metric_Map:
+            logger.warning(f"Unknown metric '{name}' – skipped")
             continue
 
-        metric_fn = Classification_Metric_Map[metric_name]
-
+        fn = Classification_Metric_Map[name]
+        prob_required = name in {
+            "roc-auc",
+            "avg-roc-auc",
+            "pr-auc",
+            "brier-score",
+            "log-loss",
+            "top-5-accuracy",
+        }
         try:
-            # Some metrics require prediction scores instead of labels
-            if metric_name in ["roc-auc", "avg-roc-auc", "pr-auc"]:
+            if prob_required:
                 if y_score is None:
-                    logger.warning(f"{metric_name} requires y_score, skipped")
+                    logger.warning(f"{name} requires probability 'y_score' – skipped")
                     continue
-                results[metric_name] = metric_fn(y_true, y_score)
+                results[name] = fn(y_true, y_score)
             else:
-                results[metric_name] = metric_fn(y_true, y_pred)
-        except Exception as e:
-            logger.error(f"Error computing {metric_name}: {e}")
-
+                results[name] = fn(y_true, y_pred)
+        except Exception as exc:
+            logger.error(f"Error computing {name}: {exc}")
     return results
 
 
 def evaluate_regression(
     y_true: Union[List, np.ndarray],
     y_pred: Union[List, np.ndarray],
-    metrics: List[str] = None,
+    metrics: List[str] | None = None,
 ) -> Dict[str, float]:
-    """
-    Evaluate regression performance using multiple metrics.
-
-    Args:
-        y_true: True values
-        y_pred: Predicted values
-        metrics: List of metric names to compute. If None, computes all available.
-
-    Returns:
-        Dictionary mapping metric names to computed values
-
-    Examples:
-        >>> y_true = [1.2, 2.3, 3.1, 4.5]
-        >>> y_pred = [1.1, 2.4, 3.0, 4.3]
-        >>> results = evaluate_regression(y_true, y_pred, metrics=['mse', 'pcc'])
-        >>> print(f"MSE: {results['mse']:.3f}")
-        >>> print(f"PCC: {results['pcc']:.3f}")
-    """
+    """Evaluate regression performance using multiple metrics."""
     if metrics is None:
         metrics = list(Regression_Metric_Map.keys())
 
-    results = {}
-
-    for metric_name in metrics:
-        if metric_name not in Regression_Metric_Map:
-            logger.warning(f"Unknown metric '{metric_name}' skipped")
+    results: Dict[str, float] = {}
+    for name in metrics:
+        if name not in Regression_Metric_Map:
+            logger.warning(f"Unknown metric '{name}' – skipped")
             continue
-
-        metric_fn = Regression_Metric_Map[metric_name]
-
         try:
-            results[metric_name] = metric_fn(y_true, y_pred)
-        except Exception as e:
-            logger.error(f"Error computing {metric_name}: {e}")
-
+            results[name] = Regression_Metric_Map[name](y_true, y_pred)
+        except Exception as exc:
+            logger.error(f"Error computing {name}: {exc}")
     return results
 
 
+# ---------------------------------------------------------------------------
+# Recommendations & convenience wrappers
+# ---------------------------------------------------------------------------
+
+
+# TODO: 推荐的指标应该与数据集有关；这个我们后面跑完结果在看吧
 def get_recommended_metrics(task_type: str) -> List[str]:
-    """
-    Get recommended metrics for different task types.
-
-    Args:
-        task_type: Type of task ('binary_classification', 'multiclass_classification', 'regression')
-
-    Returns:
-        List of recommended metric names
-
-    Examples:
-        >>> metrics = get_recommended_metrics('binary_classification')
-        >>> print(metrics)
-        ['accuracy', 'f1', 'roc-auc', 'pr-auc']
-    """
-    recommendations = {
+    """Return a sensible, *task‑specific* default metric subset."""
+    recs = {
         "binary_classification": [
             "accuracy",
-            "f1",
+            "balanced-accuracy",
             "precision",
             "recall",
+            "f1",
+            "mcc",
             "roc-auc",
             "pr-auc",
+            "brier-score",
         ],
         "multiclass_classification": [
             "accuracy",
+            "balanced-accuracy",
             "macro-f1",
-            "micro-f1",
+            "weighted-f1",
             "avg-roc-auc",
             "kappa",
         ],
-        "regression": ["mse", "rmse", "mae", "r2", "pcc", "spearman"],
+        "regression": [
+            "mse",
+            "rmse",
+            "mae",
+            "r2",
+            "pcc",
+            "spearman",
+        ],
     }
-
-    return recommendations.get(task_type, [])
+    return recs.get(task_type.lower(), [])
 
 
 def compute_all_metrics(
     y_true: Union[List, np.ndarray],
     y_pred: Union[List, np.ndarray],
     task_type: str,
-    y_score: Union[List, np.ndarray] = None,
+    y_score: Union[List, np.ndarray] | None = None,
 ) -> Dict[str, float]:
-    """
-    Compute all relevant metrics for a given task type.
-
-    Args:
-        y_true: True labels/values
-        y_pred: Predicted labels/values
-        task_type: Type of task ('binary_classification', 'multiclass_classification', 'regression')
-        y_score: Prediction scores (for classification tasks requiring probabilities)
-
-    Returns:
-        Dictionary of all computed metrics
-
-    Examples:
-        >>> # Binary classification
-        >>> results = compute_all_metrics([0,1,1,0], [0,1,0,0], 'binary_classification')
-        >>>
-        >>> # Regression
-        >>> results = compute_all_metrics([1.2,2.3], [1.1,2.4], 'regression')
-    """
+    """Thin wrapper that computes *recommended* metrics given the task type."""
+    task_type = task_type.lower()
     if "classification" in task_type:
         return evaluate_classification(
             y_true, y_pred, y_score, get_recommended_metrics(task_type)
         )
-    elif task_type == "regression":
+    if task_type == "regression":
         return evaluate_regression(y_true, y_pred, get_recommended_metrics(task_type))
-    else:
-        raise ValueError(f"Unknown task type: {task_type}")
+    raise ValueError(f"Unknown task type: {task_type}")

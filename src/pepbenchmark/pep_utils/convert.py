@@ -19,21 +19,36 @@ formats and performing conversions between different representations. It support
 multiple peptide sequence formats including FASTA, HELM, BiLN, and SMILES, along with
 advanced molecular descriptors and embeddings.
 
+All converters support both single input and batch processing:
+
 Example:
-    Basic format conversion:
+    Single input processing:
         >>> fasta2smiles = Fasta2Smiles()
         >>> smiles = fasta2smiles("ALAGGGPCR")
         >>> print(smiles)
 
+    Batch processing:
+        >>> fasta_list = ["ALAGGGPCR", "PEPTIDE"]
+        >>> smiles_list = fasta2smiles(fasta_list)
+        >>> print(smiles_list)  # Returns list of SMILES strings
+
     Molecular fingerprint generation:
         >>> fp_generator = Smiles2FP(fp_type='Morgan', radius=3, nBits=2048)
+        >>> # Single fingerprint
         >>> fingerprint = fp_generator(smiles)
         >>> print(f"Fingerprint length: {len(fingerprint)}")
+        >>> # Batch fingerprints
+        >>> fingerprints = fp_generator(["CCO", "CC(=O)O"])
+        >>> print(f"Number of fingerprints: {len(fingerprints)}")
 
     Neural embedding:
         >>> embedder = Fasta2Embedding("facebook/esm2_t30_150M_UR50D")
+        >>> # Single embedding
         >>> embedding = embedder("ALAGGGPCR")
         >>> print(f"Embedding shape: {embedding.shape}")
+        >>> # Batch embeddings
+        >>> embeddings = embedder(["ALAGGGPCR", "PEPTIDE"])
+        >>> print(f"Number of embeddings: {len(embeddings)}")
 """
 
 # Configure logging for this module
@@ -49,6 +64,7 @@ from rdkit.Chem.rdFingerprintGenerator import (
     GetTopologicalTorsionGenerator,
 )
 from rdkit.DataStructs import ConvertToNumpyArray
+from tqdm import tqdm
 from transformers import AutoModel, AutoTokenizer, PreTrainedModel, PreTrainedTokenizer
 
 from pepbenchmark.external.pep.builder import MolBuilder
@@ -68,32 +84,64 @@ class FormatTransform:
     operations. All transformation classes should inherit from this base class
     and implement the __call__ method.
 
+    Attributes:
+        desc (str): Description for progress bar (set by subclasses)
+
     Methods:
         __call__: Abstract method that performs the actual transformation
+        _process_single: Process a single input item
+        _handle_batch: Handle batch processing
     """
 
-    def __call__(self, *args, **kwargs):
-        """Perform the format transformation.
+    def __init__(self):
+        self.desc = "Processing batch"
+
+    def __call__(self, inputs, **kwargs):
+        """Perform the format transformation on single input or batch.
 
         Args:
-            *args: Variable length argument list specific to each transformation
+            inputs: Single input item or list of input items
             **kwargs: Arbitrary keyword arguments specific to each transformation
+
+        Returns:
+            Single output or list of outputs matching input format
 
         Raises:
             NotImplementedError: This method must be implemented by subclasses
         """
-        raise NotImplementedError("Subclasses must implement __call__ method.")
+        return self._handle_batch(inputs, **kwargs)
 
-    def batch_convert(self, inputs: list) -> list:
-        """
-        Perform batch conversion of multiple inputs.
+    def _handle_batch(self, inputs, **kwargs):
+        """Handle batch processing with automatic single/batch detection.
+
         Args:
-            inputs (list): List of inputs to convert. Each input should be
-                compatible with the __call__ method of the subclass.
+            inputs: Single input or list of inputs
+            **kwargs: Arguments to pass to _process_single
+
         Returns:
-            list: List of converted outputs corresponding to each input.
+            Single output or list of outputs
         """
-        return [self.__call__(input) for input in inputs]
+        if isinstance(inputs, (list, tuple)):
+            # Batch processing with progress bar using class-specific description
+            results = []
+            for item in tqdm(inputs, desc=self.desc):
+                results.append(self._process_single(item, **kwargs))
+            return results
+        else:
+            # Single item processing
+            return self._process_single(inputs, **kwargs)
+
+    def _process_single(self, input_item, **kwargs):
+        """Process a single input item.
+
+        Args:
+            input_item: Single input item to process
+            **kwargs: Additional arguments for processing
+
+        Raises:
+            NotImplementedError: This method must be implemented by subclasses
+        """
+        raise NotImplementedError("Subclasses must implement _process_single method.")
 
 
 class Fasta2Smiles(FormatTransform):
@@ -110,9 +158,17 @@ class Fasta2Smiles(FormatTransform):
         >>> converter = Fasta2Smiles()
         >>> smiles = converter("ALAGGGPCR")
         >>> print(smiles)  # Returns SMILES string representation
+
+        >>> # Batch processing
+        >>> smiles_list = converter(["ALAGGGPCR", "PEPTIDE"])
+        >>> print(smiles_list)  # Returns list of SMILES strings
     """
 
-    def __call__(self, fasta: str) -> str:
+    def __init__(self):
+        super().__init__()
+        self.desc = "Converting FASTA to SMILES"
+
+    def _process_single(self, fasta: str) -> str:
         """Convert FASTA sequence to SMILES representation.
 
         Args:
@@ -128,7 +184,7 @@ class Fasta2Smiles(FormatTransform):
 
         Example:
             >>> converter = Fasta2Smiles()
-            >>> smiles = converter(">peptide1\\nALAGGGPCR")
+            >>> smiles = converter._process_single(">peptide1\\nALAGGGPCR")
             >>> print(type(smiles))  # <class 'str'>
         """
         # Parse the FASTA: remove headers and join sequence lines
@@ -160,11 +216,6 @@ class Fasta2Embedding(FormatTransform):
     the transformer model, providing a fixed-size representation regardless
     of sequence length.
 
-    Attributes:
-        device (str): Device for model computation ('cuda' or 'cpu')
-        tokenizer: HuggingFace tokenizer for sequence preprocessing
-        model: Pretrained transformer model for embedding generation
-        pooling (str): Pooling strategy ('mean', 'max', 'cls')
     Args:
         model (str or torch.nn.Module): Either a HuggingFace model identifier
             string or a PyTorch model instance. For model instances, must
@@ -185,9 +236,16 @@ class Fasta2Embedding(FormatTransform):
         >>> embedder = Fasta2Embedding("facebook/esm2_t30_150M_UR50D")
         >>> embedding = embedder("ALAGGGPCR")
         >>> print(embedding.shape)  # (640,) for ESM-2 150M model
+
+        >>> # Batch processing
+        >>> embeddings = embedder(["ALAGGGPCR", "PEPTIDE"])
+        >>> print(len(embeddings))  # 2
     """
 
     def __init__(self, model, device: str = None, pooling: str = "mean"):
+        super().__init__()
+        self.desc = "Generating embeddings"
+
         # Device setup
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         self.pooling = pooling.lower()
@@ -200,23 +258,6 @@ class Fasta2Embedding(FormatTransform):
                 model, use_fast=False
             )
             self.model: PreTrainedModel = AutoModel.from_pretrained(model)
-        elif isinstance(model, torch.nn.Module):
-            self.model = model
-            if hasattr(model, "tokenizer") and isinstance(
-                model.tokenizer, PreTrainedTokenizer
-            ):
-                self.tokenizer = model.tokenizer
-            else:
-                model_id = getattr(getattr(model, "config", None), "name_or_path", None)
-                if model_id:
-                    self.tokenizer = AutoTokenizer.from_pretrained(
-                        model_id, use_fast=False
-                    )
-                else:
-                    raise ValueError(
-                        "Cannot infer tokenizer for provided model. "
-                        "Attach a `tokenizer` attribute or supply a model name string."
-                    )
         else:
             raise ValueError(
                 "`model` must be a HuggingFace model identifier string or a torch.nn.Module instance."
@@ -226,7 +267,7 @@ class Fasta2Embedding(FormatTransform):
         self.model.to(self.device)
         self.model.eval()
 
-    def __call__(self, fasta: str) -> np.ndarray:
+    def _process_single(self, fasta: str) -> np.ndarray:
         """Generate embedding vector from a single FASTA sequence."""
         # Parse FASTA
         lines = fasta.strip().splitlines()
@@ -263,9 +304,16 @@ class Fasta2Helm(FormatTransform):
         >>> converter = Fasta2Helm()
         >>> helm = converter("ALAGGGPCR")
         >>> print(helm)  # HELM notation string
+
+        >>> # Batch processing
+        >>> helm_list = converter(["ALAGGGPCR", "PEPTIDE"])
+        >>> print(helm_list)  # List of HELM notation strings
     """
 
     def __init__(self):
+        super().__init__()
+        self.desc = "Converting FASTA to HELM"
+
         self.lib = MonomerLibrary.from_sdf_file(
             "test_library",
             os.path.join(
@@ -280,11 +328,12 @@ class Fasta2Helm(FormatTransform):
         self.fasta_parser = FastaParser(self.lib)
         self.helm_serializer = HelmSerializer(self.lib)
 
-    def __call__(self, fasta: str) -> str:
+    def _process_single(self, fasta: str) -> str:
         """Convert FASTA sequence to HELM notation.
 
         Args:
             fasta (str): FASTA-formatted string containing peptide sequence.
+                Can include header lines (starting with '>') which will be ignored.
 
         Returns:
             str: HELM notation representation of the peptide.
@@ -315,9 +364,16 @@ class Fasta2Biln(FormatTransform):
         >>> converter = Fasta2Biln()
         >>> biln = converter("ALAGGGPCR")
         >>> print(biln)  # BiLN notation string
+
+        >>> # Batch processing
+        >>> biln_list = converter(["ALAGGGPCR", "PEPTIDE"])
+        >>> print(biln_list)  # List of BiLN notation strings
     """
 
     def __init__(self):
+        super().__init__()
+        self.desc = "Converting FASTA to BiLN"
+
         self.lib = MonomerLibrary.from_sdf_file(
             "test_library",
             os.path.join(
@@ -333,11 +389,12 @@ class Fasta2Biln(FormatTransform):
         self.fasta_parser = FastaParser(self.lib)
         self.biln_serializer = BilnSerializer(self.lib)
 
-    def __call__(self, fasta: str) -> str:
-        """Convert FASTA sequence to BiLN notation.
+    def _process_single(self, fasta: str) -> str:
+        """Convert FASTA sequence to BiLN representation.
 
         Args:
             fasta (str): FASTA-formatted string containing peptide sequence.
+                Can include header lines (starting with '>') which will be ignored.
 
         Returns:
             str: BiLN notation representation of the peptide.
@@ -366,7 +423,11 @@ class Smiles2Fasta(FormatTransform):
         sequence inference algorithms.
     """
 
-    def __call__(self, smiles: str) -> str:
+    def __init__(self):
+        super().__init__()
+        self.desc = "Converting SMILES to FASTA"
+
+    def _process_single(self, smiles: str) -> str:
         """Convert SMILES to FASTA sequence (not implemented).
 
         Args:
@@ -386,7 +447,11 @@ class Smiles2Helm(FormatTransform):
         This conversion is not yet implemented and currently returns an empty string.
     """
 
-    def __call__(self, smiles: str) -> str:
+    def __init__(self):
+        super().__init__()
+        self.desc = "Converting SMILES to HELM"
+
+    def _process_single(self, smiles: str) -> str:
         """Convert SMILES to HELM notation (not implemented).
 
         Args:
@@ -406,7 +471,11 @@ class Smiles2Biln(FormatTransform):
         This conversion is not yet implemented and currently returns an empty string.
     """
 
-    def __call__(self, smiles: str) -> str:
+    def __init__(self):
+        super().__init__()
+        self.desc = "Converting SMILES to BiLN"
+
+    def _process_single(self, smiles: str) -> str:
         """Convert SMILES to BiLN notation (not implemented).
 
         Args:
@@ -447,6 +516,10 @@ class Smiles2FP(FormatTransform):
         >>>
         >>> # RDKit fingerprint
         >>> fp_gen = Smiles2FP(fp_type='RDKit', fpSize=1024)
+
+        >>> # Batch processing
+        >>> fp_list = fp_gen(['CCO', 'CC(=O)OC1=CC=CC=C1C(=O)O'])
+        >>> print(len(fp_list))  # 2
     Attributes:
         available_fps (list): List of supported fingerprint types
         fp_type (str): Selected fingerprint type
@@ -473,6 +546,9 @@ class Smiles2FP(FormatTransform):
     ]
 
     def __init__(self, fp_type: str = "Morgan", **kwargs):
+        super().__init__()
+        self.desc = f"Generating {fp_type} fingerprints"
+
         if fp_type not in self.available_fps:
             raise ValueError(f"Unsupported fingerprint type: {fp_type}")
         self.fp_type = fp_type
@@ -487,7 +563,7 @@ class Smiles2FP(FormatTransform):
         # Override defaults with any provided kwargs
         self.params[self.fp_type].update(kwargs)
 
-    def __call__(self, smiles: str) -> np.ndarray:
+    def _process_single(self, smiles: str) -> np.ndarray:
         """Generate molecular fingerprint from SMILES string.
 
         Args:
@@ -504,7 +580,7 @@ class Smiles2FP(FormatTransform):
 
         Example:
             >>> fp_gen = Smiles2FP(fp_type='Morgan', radius=2, nBits=2048)
-            >>> fingerprint = fp_gen('CC(=O)OC1=CC=CC=C1C(=O)O')  # aspirin
+            >>> fingerprint = fp_gen._process_single('CC(=O)OC1=CC=CC=C1C(=O)O')  # aspirin
             >>> print(f"Non-zero bits: {np.sum(fingerprint)}")
             >>> print(f"Total bits: {len(fingerprint)}")  # 2048
         """
@@ -559,9 +635,16 @@ class Helm2Fasta(FormatTransform):
         >>> converter = Helm2Fasta()
         >>> fasta = converter("PEPTIDE1{A.L.A.G.G.G.P.C.R}$$$$")
         >>> print(fasta)  # "ALAGGGPCR"
+
+        >>> # Batch processing
+        >>> fasta_list = converter(["PEPTIDE1{A.L.A.G.G.G.P.C.R}$$$$", "HELM2"])
+        >>> print(fasta_list)  # List of FASTA sequences
     """
 
     def __init__(self):
+        super().__init__()
+        self.desc = "Converting HELM to FASTA"
+
         self.lib = MonomerLibrary.from_sdf_file(
             "test_library",
             os.path.join(
@@ -576,7 +659,7 @@ class Helm2Fasta(FormatTransform):
         self.helm_parser = HelmParser(self.lib)
         self.fasta_serializer = FastaSerializer(self.lib)
 
-    def __call__(self, helm: str) -> str:
+    def _process_single(self, helm: str) -> str:
         """Convert HELM notation to FASTA sequence.
 
         Args:
@@ -604,9 +687,16 @@ class Helm2Smiles(FormatTransform):
         >>> converter = Helm2Smiles()
         >>> smiles = converter("PEPTIDE1{A.L.A.G.G.G.P.C.R}$$$$")
         >>> print(smiles)  # SMILES string
+
+        >>> # Batch processing
+        >>> smiles_list = converter(["PEPTIDE1{A.L.A.G.G.G.P.C.R}$$$$", "HELM2"])
+        >>> print(smiles_list)  # List of SMILES strings
     """
 
     def __init__(self):
+        super().__init__()
+        self.desc = "Converting HELM to SMILES"
+
         self.lib = MonomerLibrary.from_sdf_file(
             "test_library",
             os.path.join(
@@ -620,7 +710,7 @@ class Helm2Smiles(FormatTransform):
         )
         self.helm_parser = HelmParser(self.lib)
 
-    def __call__(self, helm: str) -> str:
+    def _process_single(self, helm: str) -> str:
         """Convert HELM notation to SMILES string.
 
         Args:
@@ -650,9 +740,16 @@ class Helm2Biln(FormatTransform):
         >>> converter = Helm2Biln()
         >>> biln = converter("PEPTIDE1{A.L.A.G.G.G.P.C.R}$$$$")
         >>> print(biln)  # BiLN representation
+
+        >>> # Batch processing
+        >>> biln_list = converter(["PEPTIDE1{A.L.A.G.G.G.P.C.R}$$$$", "HELM2"])
+        >>> print(biln_list)  # List of BiLN representations
     """
 
     def __init__(self):
+        super().__init__()
+        self.desc = "Converting HELM to BiLN"
+
         self.lib = MonomerLibrary.from_sdf_file(
             "test_library",
             os.path.join(
@@ -667,7 +764,7 @@ class Helm2Biln(FormatTransform):
         self.helm_parser = HelmParser(self.lib)
         self.biln_serializer = BilnSerializer(self.lib)
 
-    def __call__(self, helm: str) -> str:
+    def _process_single(self, helm: str) -> str:
         """Convert HELM notation to BiLN format.
 
         Args:
@@ -695,9 +792,16 @@ class Biln2Fasta(FormatTransform):
         >>> converter = Biln2Fasta()
         >>> fasta = converter("biln_notation_here")
         >>> print(fasta)  # "ALAGGGPCR"
+
+        >>> # Batch processing
+        >>> fasta_list = converter(["biln1", "biln2"])
+        >>> print(fasta_list)  # List of FASTA sequences
     """
 
     def __init__(self):
+        super().__init__()
+        self.desc = "Converting BiLN to FASTA"
+
         self.lib = MonomerLibrary.from_sdf_file(
             "test_library",
             os.path.join(
@@ -712,7 +816,7 @@ class Biln2Fasta(FormatTransform):
         self.biln_parser = BilnParser(self.lib)
         self.fasta_serializer = FastaSerializer(self.lib)
 
-    def __call__(self, biln: str) -> str:
+    def _process_single(self, biln: str) -> str:
         """Convert BiLN notation to FASTA sequence.
 
         Args:
@@ -740,9 +844,16 @@ class Biln2Smiles(FormatTransform):
         >>> converter = Biln2Smiles()
         >>> smiles = converter("biln_notation_here")
         >>> print(smiles)  # SMILES string
+
+        >>> # Batch processing
+        >>> smiles_list = converter(["biln1", "biln2"])
+        >>> print(smiles_list)  # List of SMILES strings
     """
 
     def __init__(self):
+        super().__init__()
+        self.desc = "Converting BiLN to SMILES"
+
         self.lib = MonomerLibrary.from_sdf_file(
             "test_library",
             os.path.join(
@@ -756,7 +867,7 @@ class Biln2Smiles(FormatTransform):
         )
         self.biln_parser = BilnParser(self.lib)
 
-    def __call__(self, biln: str) -> str:
+    def _process_single(self, biln: str) -> str:
         """Convert BiLN notation to SMILES string.
 
         Args:
@@ -787,9 +898,16 @@ class Biln2Helm(FormatTransform):
         >>> converter = Biln2Helm()
         >>> helm = converter("biln_notation_here")
         >>> print(helm)  # HELM notation
+
+        >>> # Batch processing
+        >>> helm_list = converter(["biln1", "biln2"])
+        >>> print(helm_list)  # List of HELM notations
     """
 
     def __init__(self):
+        super().__init__()
+        self.desc = "Converting BiLN to HELM"
+
         self.lib = MonomerLibrary.from_sdf_file(
             "test_library",
             os.path.join(
@@ -804,7 +922,7 @@ class Biln2Helm(FormatTransform):
         self.biln_parser = BilnParser(self.lib)
         self.helm_serializer = HelmSerializer(self.lib)
 
-    def __call__(self, biln: str) -> str:
+    def _process_single(self, biln: str) -> str:
         """Convert BiLN notation to HELM format.
 
         Args:
@@ -836,9 +954,16 @@ class SMILES2Graph(FormatTransform):
     Example:
         >>> converter = SMILES2Graph()
         >>> graph = converter("CCO")  # Returns None (not implemented)
+
+        >>> # Batch processing
+        >>> graphs = converter(["CCO", "CC(=O)O"])  # Returns [None, None]
     """
 
-    def __call__(self, smiles: str):
+    def __init__(self):
+        super().__init__()
+        self.desc = "Converting SMILES to graph"
+
+    def _process_single(self, smiles: str):
         """Convert SMILES to graph representation (not implemented).
 
         Args:
@@ -871,10 +996,12 @@ AVAILABLE_TRANSFORM = {
 
 if __name__ == "__main__":
     fasta = "ALAGGGPCR"
+    fasta_list = ["ALAGGGPCR", "PEPTIDE"]
     print(f"Original FASTA: {fasta}")
+    print(f"FASTA List: {fasta_list}")
     print("=" * 80)
 
-    # Test FASTA conversions
+    # Test FASTA conversions - both single and batch
     print("🧬 FASTA Conversion Tests:")
     print("-" * 40)
 
@@ -882,7 +1009,9 @@ if __name__ == "__main__":
     try:
         fasta2smiles = Fasta2Smiles()
         smiles = fasta2smiles(fasta)
-        print(f"FASTA → SMILES: {smiles}")
+        smiles_list = fasta2smiles(fasta_list)
+        print(f"FASTA → SMILES (single): {smiles}")
+        print(f"FASTA → SMILES (batch): {smiles_list}")
     except Exception as e:
         print(f"FASTA → SMILES conversion failed: {e}")
 
@@ -890,7 +1019,9 @@ if __name__ == "__main__":
     try:
         fasta2helm = Fasta2Helm()
         helm = fasta2helm(fasta)
-        print(f"FASTA → HELM: {helm}")
+        helm_list = fasta2helm(fasta_list)
+        print(f"FASTA → HELM (single): {helm}")
+        print(f"FASTA → HELM (batch): {helm_list}")
     except Exception as e:
         print(f"FASTA → HELM conversion failed: {e}")
 
@@ -898,7 +1029,9 @@ if __name__ == "__main__":
     try:
         fasta2biln = Fasta2Biln()
         biln = fasta2biln(fasta)
-        print(f"FASTA → BiLN: {biln}")
+        biln_list = fasta2biln(fasta_list)
+        print(f"FASTA → BiLN (single): {biln}")
+        print(f"FASTA → BiLN (batch): {biln_list}")
     except Exception as e:
         print(f"FASTA → BiLN conversion failed: {e}")
 
@@ -907,6 +1040,7 @@ if __name__ == "__main__":
     # If SMILES conversion succeeded, test SMILES-related conversions
     try:
         smiles = fasta2smiles(fasta)
+        smiles_list = ["CCO", "CC(=O)O"]  # Ethanol and Acetic acid
         print("⚗️ SMILES Conversion Tests:")
         print("-" * 40)
 
@@ -916,7 +1050,11 @@ if __name__ == "__main__":
             try:
                 convert = Smiles2FP(fp_type=fp_type, radius=3, nBits=2048)
                 fp = convert(smiles)
-                print(f"{fp_type:15} → {len(fp)} bits, non-zero bits: {np.sum(fp)}")
+                fp_list = convert(smiles_list)
+                print(f"{fp_type:15} → Single: {len(fp)} bits, non-zero: {np.sum(fp)}")
+                print(
+                    f"{fp_type:15} → Batch: {len(fp_list)} items, first non-zero: {np.sum(fp_list[0])}"
+                )
             except Exception as e:
                 print(f"  {fp_type:15} → conversion failed: {e}")
 
@@ -924,9 +1062,12 @@ if __name__ == "__main__":
         smiles2fasta = Smiles2Fasta()
         smiles2helm = Smiles2Helm()
         smiles2biln = Smiles2Biln()
-        print(f"SMILES → FASTA: {smiles2fasta(smiles) or '(not implemented)'}")
-        print(f"SMILES → HELM: {smiles2helm(smiles) or '(not implemented)'}")
-        print(f"SMILES → BiLN: {smiles2biln(smiles) or '(not implemented)'}")
+        print(f"SMILES → FASTA (single): {smiles2fasta(smiles) or '(not implemented)'}")
+        print(
+            f"SMILES → FASTA (batch): {smiles2fasta(smiles_list) or '(not implemented)'}"
+        )
+        print(f"SMILES → HELM (single): {smiles2helm(smiles) or '(not implemented)'}")
+        print(f"SMILES → BiLN (single): {smiles2biln(smiles) or '(not implemented)'}")
 
     except Exception as e:
         print(f"SMILES conversion tests skipped: {e}")
@@ -936,7 +1077,8 @@ if __name__ == "__main__":
     # If HELM conversion succeeded, test HELM-related conversions
     try:
         helm = fasta2helm(fasta)
-        print("HELM Conversion Tests:")
+        helm_list = fasta2helm(fasta_list)
+        print("🧪 HELM Conversion Tests:")
         print("-" * 40)
 
         # HELM to other formats
@@ -946,19 +1088,21 @@ if __name__ == "__main__":
 
         try:
             helm_to_fasta = helm2fasta(helm)
-            print(f"HELM → FASTA: {helm_to_fasta}")
+            helm_to_fasta_list = helm2fasta(helm_list)
+            print(f"HELM → FASTA (single): {helm_to_fasta}")
+            print(f"HELM → FASTA (batch): {helm_to_fasta_list}")
         except Exception as e:
             print(f"HELM → FASTA conversion failed: {e}")
 
         try:
             helm_to_smiles = helm2smiles(helm)
-            print(f"HELM → SMILES: {helm_to_smiles}")
+            print(f"HELM → SMILES (single): {helm_to_smiles}")
         except Exception as e:
             print(f"HELM → SMILES conversion failed: {e}")
 
         try:
             helm_to_biln = helm2biln(helm)
-            print(f"HELM → BiLN: {helm_to_biln}")
+            print(f"HELM → BiLN (single): {helm_to_biln}")
         except Exception as e:
             print(f"HELM → BiLN conversion failed: {e}")
 
@@ -970,6 +1114,7 @@ if __name__ == "__main__":
     # If BiLN conversion succeeded, test BiLN-related conversions
     try:
         biln = fasta2biln(fasta)
+        biln_list = fasta2biln(fasta_list)
         print("🧪 BiLN Conversion Tests:")
         print("-" * 40)
 
@@ -980,19 +1125,21 @@ if __name__ == "__main__":
 
         try:
             biln_to_fasta = biln2fasta(biln)
-            print(f"BiLN → FASTA: {biln_to_fasta}")
+            biln_to_fasta_list = biln2fasta(biln_list)
+            print(f"BiLN → FASTA (single): {biln_to_fasta}")
+            print(f"BiLN → FASTA (batch): {biln_to_fasta_list}")
         except Exception as e:
             print(f"BiLN → FASTA conversion failed: {e}")
 
         try:
             biln_to_smiles = biln2smiles(biln)
-            print(f"BiLN → SMILES: {biln_to_smiles}")
+            print(f"BiLN → SMILES (single): {biln_to_smiles}")
         except Exception as e:
             print(f"BiLN → SMILES conversion failed: {e}")
 
         try:
             biln_to_helm = biln2helm(biln)
-            print(f"BiLN → HELM: {biln_to_helm}")
+            print(f"BiLN → HELM (single): {biln_to_helm}")
         except Exception as e:
             print(f"BiLN → HELM conversion failed: {e}")
 
@@ -1006,7 +1153,13 @@ if __name__ == "__main__":
         print("🧪 Embedding Conversion Tests:")
         embedding_generator = Fasta2Embedding("facebook/esm2_t30_150M_UR50D")
         embedding = embedding_generator(fasta)
-        print(f"FASTA → Embedding: {embedding[:10]}... (length: {len(embedding)})")
+        embedding_list = embedding_generator(fasta_list)
+        print(
+            f"FASTA → Embedding (single): {embedding[:10]}... (length: {len(embedding)})"
+        )
+        print(
+            f"FASTA → Embedding (batch): {len(embedding_list)} items, first shape: {embedding_list[0].shape}"
+        )
 
     except Exception as e:
         print(f"Embedding conversion tests skipped: {e}")
@@ -1014,8 +1167,14 @@ if __name__ == "__main__":
     try:
         smiles2graph = SMILES2Graph()
         graph = smiles2graph("CCO")  # Ethanol
-        print(f"SMILES → Graph: {graph}")  # Should return None (not implemented)
+        graph_list = smiles2graph(["CCO", "CC(=O)O"])
+        print(
+            f"SMILES → Graph (single): {graph}"
+        )  # Should return None (not implemented)
+        print(f"SMILES → Graph (batch): {graph_list}")  # Should return [None, None]
     except Exception as e:
         print(f"SMILES → Graph conversion failed: {e}")
 
-    print("\nAll tests completed!")
+    print(
+        "\nAll tests completed! All converters now support both single input and batch processing."
+    )

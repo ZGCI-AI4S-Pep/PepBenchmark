@@ -6,14 +6,9 @@ import random
 import joblib
 import numpy as np
 import optuna
+
 import pandas as pd
 from lightgbm import LGBMClassifier
-from rdkit import Chem
-from rdkit.Chem import AllChem, MACCSkeys
-from rdkit.Chem import rdFingerprintGenerator as rfp
-from rdkit.Chem import rdMolDescriptors
-from rdkit.Chem.AtomPairs import Pairs, Torsions
-from rdkit.Chem.rdmolops import RDKFingerprint
 from sklearn.ensemble import (
     AdaBoostClassifier,
     GradientBoostingClassifier,
@@ -26,15 +21,17 @@ from sklearn.metrics import (
     recall_score,
     roc_auc_score,
 )
-from sklearn.model_selection import train_test_split
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import SVC
-from utils import FP_Converter, featurize, load_data, set_seed
-
-# External libraries for xgboost, lightgbm, and optuna tuning
+from pepbenchmark.utils.seed import set_seed
 from xgboost import XGBClassifier
-
 from pepbenchmark.metadata import DATASET_MAP
+from pepbenchmark.single_pred.base_dataset import SingleTaskDatasetManager
+from pepbenchmark.pep_utils.convert import Fasta2Smiles, Smiles2FP
+from pepbenchmark.evaluator import evaluate_classification
+from pepbenchmark.utils.seed import set_seed
+import warnings
+warnings.filterwarnings("ignore")
 
 
 def parse_args():
@@ -58,16 +55,16 @@ def parse_args():
     parser.add_argument(
         "--split_type",
         type=str,
-        default="Random_split",
-        choices=["Random_split", "Homology_based_split"],
+        default="mmseqs2_split",
+        choices=["random_split", "mmseqs2_split"],
         help="Split type",
     )
     parser.add_argument(
-        "--split_index",
-        type=str,
-        default="random1",
-        choices=["random1", "random2", "random3", "random4", "random5"],
-        help="Split index",
+        "--fold_seed",
+        type=int,
+        default=0,
+        choices=[0, 1, 2, 3, 4],
+        help="Fold seed for split",
     )
     parser.add_argument(
         "--random_seed", type=int, default=42, help="Random seed for reproducibility"
@@ -114,66 +111,31 @@ if __name__ == "__main__":
         "lightgbm": LGBMClassifier(random_state=args.random_seed),
     }
 
-    # Build file paths and load data
-
-    meta = DATASET_MAP[args.task]
-    base_dir = meta["path"]
-    print(
-        f"Loading data for task '{args.task}' split '{args.split_type}/{args.split_index}'..."
+    # 新数据接口：加载数据集、划分、特征
+    dataset = SingleTaskDatasetManager(
+        dataset_name=args.task,
+        official_feature_names=["fasta", "label"],
+        force_download=False,
     )
-    train_df = pd.read_csv(
-        os.path.join(base_dir, args.split_type, args.split_index, "train.csv")
-    )
-    valid_df = pd.read_csv(
-        os.path.join(base_dir, args.split_type, args.split_index, "valid.csv")
-    )
-    test_df = pd.read_csv(
-        os.path.join(base_dir, args.split_type, args.split_index, "test.csv")
-    )
-    print(
-        f"Data loaded: train={len(train_df)}, valid={len(valid_df)}, test={len(test_df)}"
-    )
-
-    # train_seqs, train_labels = train_df['sequence'], train_df['label']
-    # valid_seqs, valid_labels = valid_df['sequence'], valid_df['label']
-    # test_seqs,  test_labels  = test_df['sequence'], test_df['label']
-
-    save_name = f"{args.fp_type}_nbits{args.nbits}_radius{args.radius}"
-    precomputed_path = os.path.join(base_dir, save_name, "combine.csv")
-    if os.path.exists(precomputed_path):
-        print(f"Using precomputed fingerprint file: {precomputed_path}")
-        all_data = pd.read_csv(precomputed_path)
-
-        train_df = all_data[all_data["sequence"].isin(train_df["sequence"])]
-        valid_df = all_data[all_data["sequence"].isin(valid_df["sequence"])]
-        test_df = all_data[all_data["sequence"].isin(test_df["sequence"])]
-
-        train_features = [
-            np.array([float(x) for x in fp.strip("[]").replace(",", " ").split()])
-            for fp in train_df["fp"].tolist()
-        ]
-        valid_features = [
-            np.array([float(x) for x in fp.strip("[]").replace(",", " ").split()])
-            for fp in valid_df["fp"].tolist()
-        ]
-        test_features = [
-            np.array([float(x) for x in fp.strip("[]").replace(",", " ").split()])
-            for fp in test_df["fp"].tolist()
-        ]
-
-    else:
-        # Featurization
-        print(
-            f"Featurizing with {args.fp_type} (nbits={args.nbits}, radius={args.radius})..."
-        )
-        conv = FP_Converter(type=args.fp_type, nbits=args.nbits, radius=args.radius)
-        train_features = featurize(train_df["sequence"], conv)
-        valid_features = featurize(valid_df["sequence"], conv)
-        test_features = featurize(test_df["sequence"], conv)
-        print("Featurization complete.")
-    train_labels = train_df["label"].tolist()
-    valid_labels = valid_df["label"].tolist()
-    test_labels = test_df["label"].tolist()
+    dataset.set_official_split_indices(split_type=args.split_type, fold_seed=args.fold_seed)
+    
+    # 直接使用convert.py中的转换器类生成fingerprint特征
+    fasta = dataset.get_official_feature("fasta")
+    fasta2smiles = Fasta2Smiles()
+    smiles2fp = Smiles2FP(fp_type=args.fp_type, radius=args.radius, nBits=args.nbits)
+    
+    smiles = fasta2smiles(fasta)
+    fp = smiles2fp(smiles)
+    dataset.set_user_feature("fingerprint", fp)
+    
+    # 获取划分后的特征和标签
+    train_features, valid_features, test_features = dataset.get_train_val_test_features(format="dict")
+    X_train = train_features["user_fingerprint"]
+    y_train = train_features["official_label"]
+    X_valid = valid_features["user_fingerprint"]
+    y_valid = valid_features["official_label"]
+    X_test = test_features["user_fingerprint"]
+    y_test = test_features["official_label"]
     # Prepare output directory
     if args.output_dir is None:
         args.output_dir = os.path.join(
@@ -182,7 +144,7 @@ if __name__ == "__main__":
             args.split_type,
             args.model,
             f"{args.fp_type}_{args.nbits}_{args.radius}",
-            args.split_index,
+            str(args.fold_seed),
         )
     os.makedirs(args.output_dir, exist_ok=True)
     print(f"Output directory: {args.output_dir}")
@@ -209,7 +171,6 @@ if __name__ == "__main__":
         )
 
         def objective(trial):
-            # Define search space per model
             if args.model == "rf":
                 params = {
                     "n_estimators": trial.suggest_int("n_estimators", 50, 200),
@@ -297,9 +258,9 @@ if __name__ == "__main__":
             else:
                 raise ValueError(f"Unknown model {args.model}")
 
-            clf.fit(train_features, train_labels)
-            preds = clf.predict_proba(valid_features)[:, 1]
-            auc = roc_auc_score(valid_labels, preds)
+            clf.fit(X_train, y_train)
+            preds = clf.predict_proba(X_valid)[:, 1]
+            auc = roc_auc_score(y_valid, preds)
             return auc
 
         study = optuna.create_study(direction="maximize")
@@ -314,13 +275,13 @@ if __name__ == "__main__":
 
     # Train and evaluate
     print(f"Training model '{args.model}'...")
-    model.fit(train_features, train_labels)
+    model.fit(X_train, y_train)
     print("Training complete. Evaluating...")
     results = []
     for name, X, y in [
-        ("Train", train_features, train_labels),
-        ("Validation", valid_features, valid_labels),
-        ("Test", test_features, test_labels),
+        ("Train", X_train, y_train),
+        ("Validation", X_valid, y_valid),
+        ("Test", X_test, y_test),
     ]:
         preds = model.predict(X)
         probs = (
