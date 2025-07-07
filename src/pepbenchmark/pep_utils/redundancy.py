@@ -34,7 +34,7 @@ class RedundancyFilter:
     def __call__(self, fasta: pd.Series, label: pd.Series) -> List[int]:
         assert len(fasta) == len(label), "Fasta and label must be of same length"
         self.origin_length = len(fasta)
-        df = pd.concat([fasta, label], axis=1)
+        df = pd.concat([pd.Series(fasta), pd.Series(label)], axis=1)
         df.columns = ["sequence", "label"]
         pos_df = df[df["label"] == 1]
         neg_df = df[df["label"] == 0]

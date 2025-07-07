@@ -135,3 +135,4 @@ checkpoints*
 *.log
 __pycache__/
 docs/build/
+.ruff_cache/
