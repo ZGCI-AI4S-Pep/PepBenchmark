@@ -1,6 +1,9 @@
+
 # 数据集构建指南
 
-PepBenchmark 提供了灵活的数据集构建和管理系统，支持从完全官方配置到完全自定义的多种使用场景。数据集构建涉及四个核心要素：
+PepBenchmark 提供了灵活的数据集构建和管理系统，支持从完全官方配置到完全自定义的多种使用场景。
+
+数据集构建涉及四个核心要素：
 
 1. **正样本数据** - 具有目标属性的肽序列
 2. **负样本数据** - 不具有目标属性的肽序列
@@ -28,7 +31,11 @@ PepBenchmark 提供了灵活的数据集构建和管理系统，支持从完全�
 ## 方式一：完全使用官方数据集
 
 这是最简单的使用方式，适合快速开始和标准基准测试。
-
+用户可以使用带有`official`的接口：
+ — get_official_feature()
+ - set_official_feature()
+ - get_official_split()
+ - set_official_split()
 ### 基本用法
 
 ```python
@@ -47,35 +54,14 @@ dataset.set_official_split_indices(split_type="random_split", fold_seed=0)
 train_data, valid_data, test_data = dataset.get_train_val_test_features(format="dict")
 ```
 
-### 支持的官方特征类型
-
-- `fasta` - 氨基酸序列
-- `label` - 标签信息
-- `fasta_onehot` - 独热编码特征
-- `fasta_esm2_150` - ESM2蛋白语言模型嵌入
-- `smiles` - SMILES分子表示
-- `helm` - HELM标记
-- `biln` - BiLN表示
-- `ecfp` - ECFP分子指纹
-
-### 支持的数据集
-
-```python
-from pepbenchmark.metadata import get_all_datasets, get_datasets_by_category
-
-# 查看所有可用数据集
-all_datasets = get_all_datasets()
-
-# 按类别查看数据集
-datasets_by_category = get_datasets_by_category()
-print("二分类数据集:", datasets_by_category["natural"]["binary_classification"])
-```
-
+支持的数据集参考xxx
+支持的官方特征参考xxx
+支持的划分方式参考xxx
 ---
 
 ## 方式二：使用官方样本，自定义特征和划分
 
-当你想使用标准的正负样本，但需要自定义特征工程或划分策略时使用此方式。
+当你想使用官方的正负样本，但需要自定义特征工程或划分策略时使用此方式。
 
 ### 自定义特征转换
 
@@ -93,15 +79,14 @@ dataset = SingleTaskDatasetManager(
 # 使用转换器生成自定义特征
 fasta_sequences = dataset.get_official_feature("fasta")
 
-# 生成ECFP分子指纹
-ecfp_converter = Fasta2ECFP()
-ecfp_features = ecfp_converter(fasta_sequences)
-dataset.set_user_feature("ecfp_custom", ecfp_features)
-
 # 生成ESM2嵌入
 esm2_converter = Fasta2ESM2()
 esm2_features = esm2_converter(fasta_sequences)
 dataset.set_user_feature("esm2_custom", esm2_features)
+
+# 数据访问
+
+
 ```
 
 ### 自定义数据划分
@@ -251,59 +236,3 @@ multitask_dataset.negative_sampling(ratio=1.0, seed=42)
 ```
 
 ---
-
-## 数据质量控制
-
-### 序列验证
-
-```python
-from pepbenchmark.pep_utils.validation import validate_sequences
-
-# 验证序列格式和合理性
-validation_results = validate_sequences(
-    sequences=all_sequences,
-    min_length=3,
-    max_length=50,
-    allowed_chars="ACDEFGHIKLMNPQRSTVWY"
-)
-
-if not validation_results["valid"]:
-    print("发现无效序列:", validation_results["invalid_sequences"])
-```
-
-### 数据统计
-
-```python
-from pepbenchmark.utils.statistics import get_dataset_statistics
-
-# 获取数据集统计信息
-stats = get_dataset_statistics(custom_dataset)
-print(f"正样本数量: {stats['positive_count']}")
-print(f"负样本数量: {stats['negative_count']}")
-print(f"平均序列长度: {stats['avg_length']}")
-print(f"序列长度范围: {stats['length_range']}")
-```
-
----
-
-## 保存和加载数据集
-
-```python
-# 保存处理后的数据集
-custom_dataset.save_dataset("path/to/custom_dataset.pkl")
-
-# 加载保存的数据集
-loaded_dataset = SingleTaskDatasetManager.load_dataset("path/to/custom_dataset.pkl")
-```
-
----
-
-## 最佳实践
-
-1. **数据预处理**：始终进行序列验证和去冗余处理
-2. **特征选择**：根据下游任务选择合适的特征表示
-3. **划分策略**：对于蛋白质/肽序列，推荐使用同源性划分避免数据泄漏
-4. **负样本策略**：确保负样本与正样本在长度和组成上保持合理分布
-5. **交叉验证**：使用多个随机种子进行多次实验以确保结果稳定性
-
-通过这套系统，你可以灵活地构建适合自己研究需求的高质量肽序列数据集。

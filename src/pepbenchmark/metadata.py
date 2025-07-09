@@ -55,23 +55,24 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Base directory for processed peptide datasets
-DEFAULT_DATA_DIR = os.path.expanduser("~/.pepbenchmark_cache/")
+# DEFAULT_DATA_DIR = os.path.expanduser("~/.pepbenchmark_cache/")
+DEFAULT_DATA_DIR = os.path.expanduser("~/assist/git_review/PepBenchmark/data_share/")
 DATA_DIR = os.environ.get("PEPBENCHMARK_DATA_DIR", DEFAULT_DATA_DIR)
 
+"""
+- path: 数据集默认存储的路径;
+- type: 任务类型（分类 回归）
+- num_class: 类别数量（仅对分类任务适用）；对于回归任务是1；
+- size: 数据集大小（样本数量）
+- size_range: 氨基酸数量的范围
+- max_len: 最大氨基酸数量
+- nature: 三个值分别是True（自然氨基酸）、False（非自然氨基酸）和"mixed"（同时包含天然和非天然氨基酸）
+- description: 数据集描述
+- group: 数据集所属组
+- format: 数据集文件格式
+"""
 
 DATASET_MAP = {
-    "test": {
-        "path": os.path.join(DATA_DIR, "ADME/test"),
-        "type": "binary_classification",
-        "num_class": 2,
-        "size": 238,
-        "size_range": "5–53",
-        "max_len": 53,
-        "nature": "natural",
-        "description": "Blood–brain barrier penetrating peptides (APML dataset)",
-        "group": "ADME",
-        "format": "FASTA",
-    },
     "BBP_APML": {
         "path": os.path.join(DATA_DIR, "ADME/BBP_APML"),
         "type": "binary_classification",
@@ -79,7 +80,7 @@ DATASET_MAP = {
         "size": 238,
         "size_range": "5–53",
         "max_len": 53,
-        "nature": "natural",
+        "nature": True,
         "description": "Blood–brain barrier penetrating peptides (APML dataset)",
         "group": "ADME",
         "format": "FASTA",
@@ -91,7 +92,7 @@ DATASET_MAP = {
         "size": 2324,
         "size_range": "2–50",
         "max_len": 50,
-        "nature": "natural",
+        "nature": True,
         "description": "Cell penetrating peptides (Pepland dataset)",
         "group": "ADME",
         "format": "FASTA",
@@ -103,7 +104,7 @@ DATASET_MAP = {
         "size": 7239,
         "size_range": "2–15",
         "max_len": 15,
-        "nature": "non-natural",
+        "nature": False,
         "description": "Non-natural cell penetrating peptides (CycPeptMPDB-PAMA dataset)",
         "group": "ADME",
         "format": "HELM",
@@ -115,7 +116,7 @@ DATASET_MAP = {
         "size": 17178,
         "size_range": "5–198",
         "max_len": 198,
-        "nature": "natural",
+        "nature": True,
         "description": "Nonfouling peptides",
         "group": "ADME",
         "format": "FASTA",
@@ -127,7 +128,7 @@ DATASET_MAP = {
         "size": 18453,
         "size_range": "19–198",
         "max_len": 198,
-        "nature": "natural",
+        "nature": True,
         "description": "Soluble vs insoluble peptides",
         "group": "ADME",
         "format": "FASTA",
@@ -139,7 +140,7 @@ DATASET_MAP = {
         "size": 1616,
         "size_range": "5–100",
         "max_len": 100,
-        "nature": "natural",
+        "nature": True,
         "description": "Antifungal peptides (APML dataset)",
         "group": "Therapeutic-AMP",
         "format": "FASTA",
@@ -151,7 +152,7 @@ DATASET_MAP = {
         "size": 6760,
         "size_range": "1–190",
         "max_len": 190,
-        "nature": "natural",
+        "nature": True,
         "description": "Antimicrobial peptides (MIC regression, all species)",
         "group": "Therapeutic-AMP",
         "format": "FASTA",
@@ -163,7 +164,7 @@ DATASET_MAP = {
         "size": 5102,
         "size_range": "1–190",
         "max_len": 190,
-        "nature": "natural",
+        "nature": True,
         "description": "Antimicrobial peptides (MIC regression, E. coli)",
         "group": "Therapeutic-AMP",
         "format": "FASTA",
@@ -175,7 +176,7 @@ DATASET_MAP = {
         "size": 2852,
         "size_range": "1–190",
         "max_len": 190,
-        "nature": "natural",
+        "nature": True,
         "description": "Antimicrobial peptides (MIC regression, P. aeruginosa)",
         "group": "Therapeutic-AMP",
         "format": "FASTA",
@@ -187,7 +188,7 @@ DATASET_MAP = {
         "size": 4582,
         "size_range": "1–190",
         "max_len": 190,
-        "nature": "natural",
+        "nature": True,
         "description": "Antimicrobial peptides (MIC regression, S. aureus)",
         "group": "Therapeutic-AMP",
         "format": "FASTA",
@@ -199,7 +200,7 @@ DATASET_MAP = {
         "size": 44614,
         "size_range": "2–50",
         "max_len": 50,
-        "nature": "natural",
+        "nature": True,
         "description": "Antimicrobial peptides (PepDiffusion dataset)",
         "group": "Therapeutic-AMP",
         "format": "FASTA",
@@ -211,7 +212,7 @@ DATASET_MAP = {
         "size": 497,
         "size_range": "5–141",
         "max_len": 141,
-        "nature": "natural",
+        "nature": True,
         "description": "Antiparasite peptides (APML dataset)",
         "group": "Therapeutic-AMP",
         "format": "FASTA",
@@ -223,7 +224,7 @@ DATASET_MAP = {
         "size": 4796,
         "size_range": "5–100",
         "max_len": 100,
-        "nature": "natural",
+        "nature": True,
         "description": "Antiviral peptides (APML dataset)",
         "group": "Therapeutic-AMP",
         "format": "FASTA",
@@ -235,7 +236,7 @@ DATASET_MAP = {
         "size": 9774,
         "size_range": "5–50",
         "max_len": 50,
-        "nature": "natural",
+        "nature": True,
         "description": "Antibacterial peptides (canonical, APML2 dataset)",
         "group": "Therapeutic-AMP",
         "format": "FASTA",
@@ -247,7 +248,7 @@ DATASET_MAP = {
         "size": 1726,
         "size_range": "1–49",
         "max_len": 49,
-        "nature": "non-natural",
+        "nature": False,
         "description": "Antibacterial peptides (non-canonical, APML2 dataset)",
         "group": "Therapeutic-AMP",
         "format": "BILN",
@@ -259,7 +260,7 @@ DATASET_MAP = {
         "size": 381,
         "size_range": "3–56",
         "max_len": 56,
-        "nature": "non-natural",
+        "nature": False,
         "description": "Antiviral peptides (non-canonical, APML2 dataset)",
         "group": "Therapeutic-AMP",
         "format": "BILN",
@@ -271,7 +272,7 @@ DATASET_MAP = {
         "size": 1982,
         "size_range": "5–84",
         "max_len": 84,
-        "nature": "natural",
+        "nature": True,
         "description": "ACE-inhibitory peptides (APML dataset)",
         "group": "Therapeutic-Other",
         "format": "FASTA",
@@ -283,7 +284,7 @@ DATASET_MAP = {
         "size": 1408,
         "size_range": "2–50",
         "max_len": 50,
-        "nature": "natural",
+        "nature": True,
         "description": "Anticancer peptides (APML dataset)",
         "group": "Therapeutic-Other",
         "format": "FASTA",
@@ -295,7 +296,7 @@ DATASET_MAP = {
         "size": 822,
         "size_range": "2–28",
         "max_len": 28,
-        "nature": "natural",
+        "nature": True,
         "description": "Antioxidative peptides (APML dataset)",
         "group": "Therapeutic-Other",
         "format": "FASTA",
@@ -307,7 +308,7 @@ DATASET_MAP = {
         "size": 834,
         "size_range": "1–20",
         "max_len": 20,
-        "nature": "natural",
+        "nature": True,
         "description": "Antidiabetic peptides (BioDADPep dataset)",
         "group": "Therapeutic-Other",
         "format": "FASTA",
@@ -319,7 +320,7 @@ DATASET_MAP = {
         "size": 1232,
         "size_range": "2–33",
         "max_len": 33,
-        "nature": "natural",
+        "nature": True,
         "description": "Dipeptidyl peptidase inhibitor peptides (APML dataset)",
         "group": "Therapeutic-Other",
         "format": "FASTA",
@@ -331,7 +332,7 @@ DATASET_MAP = {
         "size": 4778,
         "size_range": "5–99",
         "max_len": 99,
-        "nature": "natural",
+        "nature": True,
         "description": "Neuropeptides (APML dataset)",
         "group": "Therapeutic-Other",
         "format": "FASTA",
@@ -343,7 +344,7 @@ DATASET_MAP = {
         "size": 436,
         "size_range": "5–49",
         "max_len": 49,
-        "nature": "natural",
+        "nature": True,
         "description": "Quorum sensing peptides (APML dataset)",
         "group": "Therapeutic-Other",
         "format": "FASTA",
@@ -355,7 +356,7 @@ DATASET_MAP = {
         "size": 955,
         "size_range": "8–37",
         "max_len": 37,
-        "nature": "natural",
+        "nature": True,
         "description": "Tumor T cell antigens (TCAHybrid dataset)",
         "group": "Therapeutic-Other",
         "format": "FASTA",
@@ -367,7 +368,7 @@ DATASET_MAP = {
         "size": 1926,
         "size_range": "6–39",
         "max_len": 39,
-        "nature": "natural",
+        "nature": True,
         "description": "Hemolytic peptides with regression labels (HemoPI2 dataset)",
         "group": "Tox",
         "format": "FASTA",
@@ -379,7 +380,7 @@ DATASET_MAP = {
         "size": 5611,
         "size_range": "1–190",
         "max_len": 190,
-        "nature": "natural",
+        "nature": True,
         "description": "Hemolytic peptides (PeptideBERT dataset)",
         "group": "Tox",
         "format": "FASTA",
@@ -391,7 +392,7 @@ DATASET_MAP = {
         "size": 3087,
         "size_range": "2–50",
         "max_len": 50,
-        "nature": "natural",
+        "nature": True,
         "description": "Toxic peptides (APML dataset)",
         "group": "Tox",
         "format": "FASTA",
@@ -400,19 +401,11 @@ DATASET_MAP = {
         "path": os.path.join(DATA_DIR, "multitask_peptidepedia"),
         "type": "binary_classification",
         "num_class": 1,
-        "nature": "natural",
+        "nature": True,
         "description": "Activity peptides from PeptidePedia",
         "format": "FASTA",
     },
 }
-
-
-# 添加数据集下载相关的URL信息到DATASET_MAP
-# 注意：实际使用时需要在每个数据集条目中添加"url"字段和可选的"checksum"字段
-# 例如: "url": "https://example.com/dataset.csv", "checksum": "md5hash"
-
-
-# 动态生成数据集分类列表
 
 
 def _generate_dataset_keys():
@@ -427,7 +420,7 @@ def _generate_dataset_keys():
     non_natural_regression = []
 
     for dataset_name, info in DATASET_MAP.items():
-        is_natural = info["nature"] == "natural"
+        is_natural = info["nature"]
         task_type = info["type"]
 
         if is_natural:
@@ -505,7 +498,7 @@ def get_datasets_by_category():
     """
     dataset_keys = _generate_dataset_keys()
     return {
-        "natural": {
+        True: {
             "binary": dataset_keys["natural_binary"].copy(),
             "multiclass": dataset_keys["natural_multiclass"].copy(),
             "regression": dataset_keys["natural_regression"].copy(),
@@ -590,3 +583,12 @@ def validate_dataset_files(dataset_name):
         "missing": missing_files,
         "base_path": base_path,
     }
+
+
+if __name__ == "__main__":
+    print("Available datasets:")
+    for category, tasks in DATASET_MAP.items():
+        print(f"  {category}:")
+        for task, datasets in tasks.items():
+            print(f"    {task}: {datasets}")
+    print()
