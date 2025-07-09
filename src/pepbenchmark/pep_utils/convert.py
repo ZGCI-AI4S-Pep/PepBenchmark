@@ -51,11 +51,12 @@ Example:
         >>> print(f"Number of embeddings: {len(embeddings)}")
 """
 
-# Configure logging for this module
+# Configure logging for this module``
 import os
 
 import numpy as np
 import torch
+from ogb.utils import smiles2graph
 from rdkit import Chem
 from rdkit.Chem import MACCSkeys
 from rdkit.Chem.rdFingerprintGenerator import (
@@ -64,6 +65,7 @@ from rdkit.Chem.rdFingerprintGenerator import (
     GetTopologicalTorsionGenerator,
 )
 from rdkit.DataStructs import ConvertToNumpyArray
+from torch_geometric.data import Data
 from tqdm import tqdm
 from transformers import AutoModel, AutoTokenizer, PreTrainedModel, PreTrainedTokenizer
 
@@ -940,59 +942,71 @@ class Biln2Helm(FormatTransform):
         return self.helm_serializer.serialize(parsed_data)
 
 
-class SMILES2Graph(FormatTransform):
-    """Convert SMILES string into graph representation.
+class Smiles2Graph(FormatTransform):
+    """Convert SMILES notation to graph representation.
 
-    This class is intended to convert SMILES notation into molecular graph
-    representations suitable for graph neural networks and other graph-based
-    machine learning applications.
-
-    Note:
-        This conversion is currently not implemented and serves as a placeholder
-        for future development.
+    This converter transforms a SMILES (Simplified Molecular-Input Line-Entry System)
+    string into a graph format suitable for machine learning tasks.
 
     Example:
-        >>> converter = SMILES2Graph()
-        >>> graph = converter("CCO")  # Returns None (not implemented)
+        >>> converter = Smiles2Graph()
+        >>> graph = converter("CCO")
+        >>> print(graph)  # PyTorch Geometric Data object
+
+        >>> # With label
+        >>> labeled_graph = converter("CCO", label=torch.tensor([1]))
+        >>> print(labeled_graph.y)  # tensor([1])
 
         >>> # Batch processing
-        >>> graphs = converter(["CCO", "CC(=O)O"])  # Returns [None, None]
+        >>> graph_list = converter(["CCO", "CCC"])
+        >>> print(graph_list)  # List of PyTorch Geometric Data objects
     """
 
     def __init__(self):
         super().__init__()
-        self.desc = "Converting SMILES to graph"
+        self.desc = "Converting SMILES to graph representation"
 
-    def _process_single(self, smiles: str):
-        """Convert SMILES to graph representation (not implemented).
+    def _process_single(self, smiles: str, label: torch.Tensor = None) -> dict:
+        """Convert SMILES string to graph representation.
 
         Args:
-            smiles (str): SMILES notation string.
+            smiles (str): SMILES string of the molecule.
+            label (torch.Tensor, optional): Label tensor for the graph.
 
         Returns:
-            None: Conversion not yet implemented.
+            dict: Graph representation with nodes and edges.
         """
-        logger.warning("SMILES to Graph conversion not yet implemented")
-        return None
+        # Convert SMILES to graph format by ogb
+        graph_data = smiles2graph(smiles)
 
+        # Create a PyTorch Geometric Data object
+        graph = Data(
+            x=torch.from_numpy(graph_data["node_feat"]),
+            edge_index=torch.from_numpy(graph_data["edge_index"]),
+            edge_attr=torch.from_numpy(graph_data["edge_feat"]),
+        )
 
-AVAILABLE_TRANSFORM = {
-    ("fasta", "smiles"): Fasta2Smiles,
-    ("fasta", "helm"): Fasta2Helm,
-    ("fasta", "biln"): Fasta2Biln,
-    ("fasta", "embedding"): Fasta2Embedding,
-    ("smiles", "graph"): SMILES2Graph,
-    ("smiles", "fasta"): Smiles2Fasta,
-    ("smiles", "helm"): Smiles2Helm,
-    ("smiles", "biln"): Smiles2Biln,
-    ("smiles", "fingerprint"): Smiles2FP,
-    ("helm", "fasta"): Helm2Fasta,
-    ("helm", "smiles"): Helm2Smiles,
-    ("helm", "biln"): Helm2Biln,
-    ("biln", "fasta"): Biln2Fasta,
-    ("biln", "smiles"): Biln2Smiles,
-    ("biln", "helm"): Biln2Helm,
-}
+        # If a label is provided, assign it to the graph
+        if label is not None:
+            graph.y = label
+
+        return graph
+
+    def __call__(self, inputs, label: torch.Tensor = None):
+        """Call method to handle both single and batch inputs.
+
+        Args:
+            inputs (str or list of str): Single SMILES string or a list of SMILES strings.
+            label (torch.Tensor, optional): Label tensor for a single graph.
+
+        Returns:
+            dict or list of dict: Single or list of graph representations.
+        """
+        if isinstance(inputs, (list, tuple)):
+            return [self._process_single(smiles) for smiles in inputs]
+        else:
+            return self._process_single(inputs, label=label)
+
 
 if __name__ == "__main__":
     fasta = "ALAGGGPCR"
@@ -1006,174 +1020,117 @@ if __name__ == "__main__":
     print("-" * 40)
 
     # FASTA to SMILES
-    try:
-        fasta2smiles = Fasta2Smiles()
-        smiles = fasta2smiles(fasta)
-        smiles_list = fasta2smiles(fasta_list)
-        print(f"FASTA → SMILES (single): {smiles}")
-        print(f"FASTA → SMILES (batch): {smiles_list}")
-    except Exception as e:
-        print(f"FASTA → SMILES conversion failed: {e}")
+    fasta2smiles = Fasta2Smiles()
+    smiles = fasta2smiles(fasta)
+    smiles_list = fasta2smiles(fasta_list)
+    print(f"FASTA → SMILES (single): {smiles}")
+    print(f"FASTA → SMILES (batch): {smiles_list}")
 
     # FASTA to HELM
-    try:
-        fasta2helm = Fasta2Helm()
-        helm = fasta2helm(fasta)
-        helm_list = fasta2helm(fasta_list)
-        print(f"FASTA → HELM (single): {helm}")
-        print(f"FASTA → HELM (batch): {helm_list}")
-    except Exception as e:
-        print(f"FASTA → HELM conversion failed: {e}")
+    fasta2helm = Fasta2Helm()
+    helm = fasta2helm(fasta)
+    helm_list = fasta2helm(fasta_list)
+    print(f"FASTA → HELM (single): {helm}")
+    print(f"FASTA → HELM (batch): {helm_list}")
 
     # FASTA to BiLN
-    try:
-        fasta2biln = Fasta2Biln()
-        biln = fasta2biln(fasta)
-        biln_list = fasta2biln(fasta_list)
-        print(f"FASTA → BiLN (single): {biln}")
-        print(f"FASTA → BiLN (batch): {biln_list}")
-    except Exception as e:
-        print(f"FASTA → BiLN conversion failed: {e}")
+    fasta2biln = Fasta2Biln()
+    biln = fasta2biln(fasta)
+    biln_list = fasta2biln(fasta_list)
+    print(f"FASTA → BiLN (single): {biln}")
+    print(f"FASTA → BiLN (batch): {biln_list}")
 
     print("\n" + "=" * 80)
 
-    # If SMILES conversion succeeded, test SMILES-related conversions
-    try:
-        smiles = fasta2smiles(fasta)
-        smiles_list = ["CCO", "CC(=O)O"]  # Ethanol and Acetic acid
-        print("⚗️ SMILES Conversion Tests:")
-        print("-" * 40)
+    # SMILES Conversion Tests
+    smiles = fasta2smiles(fasta)
+    smiles_list = ["CCO", "CC(=O)O"]
+    print("⚗️ SMILES Conversion Tests:")
+    print("-" * 40)
 
-        # SMILES to fingerprints
-        print("SMILES → Fingerprints:")
-        for fp_type in Smiles2FP.available_fps:
-            try:
-                convert = Smiles2FP(fp_type=fp_type, radius=3, nBits=2048)
-                fp = convert(smiles)
-                fp_list = convert(smiles_list)
-                print(f"{fp_type:15} → Single: {len(fp)} bits, non-zero: {np.sum(fp)}")
-                print(
-                    f"{fp_type:15} → Batch: {len(fp_list)} items, first non-zero: {np.sum(fp_list[0])}"
-                )
-            except Exception as e:
-                print(f"  {fp_type:15} → conversion failed: {e}")
-
-        # SMILES to other formats (not yet implemented)
-        smiles2fasta = Smiles2Fasta()
-        smiles2helm = Smiles2Helm()
-        smiles2biln = Smiles2Biln()
-        print(f"SMILES → FASTA (single): {smiles2fasta(smiles) or '(not implemented)'}")
+    # SMILES to fingerprints
+    print("SMILES → Fingerprints:")
+    for fp_type in Smiles2FP.available_fps:
+        convert = Smiles2FP(fp_type=fp_type, radius=3, nBits=2048)
+        fp = convert(smiles)
+        fp_list = convert(smiles_list)
+        print(f"{fp_type:15} → Single: {len(fp)} bits, non-zero: {np.sum(fp)}")
         print(
-            f"SMILES → FASTA (batch): {smiles2fasta(smiles_list) or '(not implemented)'}"
-        )
-        print(f"SMILES → HELM (single): {smiles2helm(smiles) or '(not implemented)'}")
-        print(f"SMILES → BiLN (single): {smiles2biln(smiles) or '(not implemented)'}")
-
-    except Exception as e:
-        print(f"SMILES conversion tests skipped: {e}")
-
-    print("\n" + "=" * 80)
-
-    # If HELM conversion succeeded, test HELM-related conversions
-    try:
-        helm = fasta2helm(fasta)
-        helm_list = fasta2helm(fasta_list)
-        print("🧪 HELM Conversion Tests:")
-        print("-" * 40)
-
-        # HELM to other formats
-        helm2fasta = Helm2Fasta()
-        helm2smiles = Helm2Smiles()
-        helm2biln = Helm2Biln()
-
-        try:
-            helm_to_fasta = helm2fasta(helm)
-            helm_to_fasta_list = helm2fasta(helm_list)
-            print(f"HELM → FASTA (single): {helm_to_fasta}")
-            print(f"HELM → FASTA (batch): {helm_to_fasta_list}")
-        except Exception as e:
-            print(f"HELM → FASTA conversion failed: {e}")
-
-        try:
-            helm_to_smiles = helm2smiles(helm)
-            print(f"HELM → SMILES (single): {helm_to_smiles}")
-        except Exception as e:
-            print(f"HELM → SMILES conversion failed: {e}")
-
-        try:
-            helm_to_biln = helm2biln(helm)
-            print(f"HELM → BiLN (single): {helm_to_biln}")
-        except Exception as e:
-            print(f"HELM → BiLN conversion failed: {e}")
-
-    except Exception as e:
-        print(f"HELM conversion tests skipped: {e}")
-
-    print("\n" + "=" * 80)
-
-    # If BiLN conversion succeeded, test BiLN-related conversions
-    try:
-        biln = fasta2biln(fasta)
-        biln_list = fasta2biln(fasta_list)
-        print("🧪 BiLN Conversion Tests:")
-        print("-" * 40)
-
-        # BiLN to other formats
-        biln2fasta = Biln2Fasta()
-        biln2smiles = Biln2Smiles()
-        biln2helm = Biln2Helm()
-
-        try:
-            biln_to_fasta = biln2fasta(biln)
-            biln_to_fasta_list = biln2fasta(biln_list)
-            print(f"BiLN → FASTA (single): {biln_to_fasta}")
-            print(f"BiLN → FASTA (batch): {biln_to_fasta_list}")
-        except Exception as e:
-            print(f"BiLN → FASTA conversion failed: {e}")
-
-        try:
-            biln_to_smiles = biln2smiles(biln)
-            print(f"BiLN → SMILES (single): {biln_to_smiles}")
-        except Exception as e:
-            print(f"BiLN → SMILES conversion failed: {e}")
-
-        try:
-            biln_to_helm = biln2helm(biln)
-            print(f"BiLN → HELM (single): {biln_to_helm}")
-        except Exception as e:
-            print(f"BiLN → HELM conversion failed: {e}")
-
-    except Exception as e:
-        print(f"BiLN conversion tests skipped: {e}")
-
-    print("\n" + "=" * 80)
-
-    # Test embedding generator (requires a model—shown here as example only)
-    try:
-        print("🧪 Embedding Conversion Tests:")
-        embedding_generator = Fasta2Embedding("facebook/esm2_t30_150M_UR50D")
-        embedding = embedding_generator(fasta)
-        embedding_list = embedding_generator(fasta_list)
-        print(
-            f"FASTA → Embedding (single): {embedding[:10]}... (length: {len(embedding)})"
-        )
-        print(
-            f"FASTA → Embedding (batch): {len(embedding_list)} items, first shape: {embedding_list[0].shape}"
+            f"{fp_type:15} → Batch: {len(fp_list)} items, first non-zero: {np.sum(fp_list[0])}"
         )
 
-    except Exception as e:
-        print(f"Embedding conversion tests skipped: {e}")
+    # SMILES to other formats
+    smiles2fasta = Smiles2Fasta()
+    smiles2helm = Smiles2Helm()
+    smiles2biln = Smiles2Biln()
+    print(f"SMILES → FASTA (single): {smiles2fasta(smiles) or '(not implemented)'}")
+    print(f"SMILES → FASTA (batch): {smiles2fasta(smiles_list) or '(not implemented)'}")
+    print(f"SMILES → HELM (single): {smiles2helm(smiles) or '(not implemented)'}")
+    print(f"SMILES → BiLN (single): {smiles2biln(smiles) or '(not implemented)'}")
 
-    try:
-        smiles2graph = SMILES2Graph()
-        graph = smiles2graph("CCO")  # Ethanol
-        graph_list = smiles2graph(["CCO", "CC(=O)O"])
-        print(
-            f"SMILES → Graph (single): {graph}"
-        )  # Should return None (not implemented)
-        print(f"SMILES → Graph (batch): {graph_list}")  # Should return [None, None]
-    except Exception as e:
-        print(f"SMILES → Graph conversion failed: {e}")
+    print("\n" + "=" * 80)
+
+    # HELM Conversion Tests
+    helm = fasta2helm(fasta)
+    helm_list = fasta2helm(fasta_list)
+    print("🧪 HELM Conversion Tests:")
+    print("-" * 40)
+
+    helm2fasta = Helm2Fasta()
+    helm2smiles = Helm2Smiles()
+    helm2biln = Helm2Biln()
+
+    helm_to_fasta = helm2fasta(helm)
+    helm_to_fasta_list = helm2fasta(helm_list)
+    print(f"HELM → FASTA (single): {helm_to_fasta}")
+    print(f"HELM → FASTA (batch): {helm_to_fasta_list}")
+
+    helm_to_smiles = helm2smiles(helm)
+    print(f"HELM → SMILES (single): {helm_to_smiles}")
+
+    helm_to_biln = helm2biln(helm)
+    print(f"HELM → BiLN (single): {helm_to_biln}")
+
+    print("\n" + "=" * 80)
+
+    # BiLN Conversion Tests
+    biln = fasta2biln(fasta)
+    biln_list = fasta2biln(fasta_list)
+    print("🧪 BiLN Conversion Tests:")
+    print("-" * 40)
+
+    biln2fasta = Biln2Fasta()
+    biln2smiles = Biln2Smiles()
+    biln2helm = Biln2Helm()
+
+    biln_to_fasta = biln2fasta(biln)
+    biln_to_fasta_list = biln2fasta(biln_list)
+    print(f"BiLN → FASTA (single): {biln_to_fasta}")
+    print(f"BiLN → FASTA (batch): {biln_to_fasta_list}")
+
+    biln_to_smiles = biln2smiles(biln)
+    print(f"BiLN → SMILES (single): {biln_to_smiles}")
+
+    biln_to_helm = biln2helm(biln)
+    print(f"BiLN → HELM (single): {biln_to_helm}")
+
+    print("\n" + "=" * 80)
+
+    # Embedding Conversion Tests
+    print("🧪 Embedding Conversion Tests:")
+    embedding_generator = Fasta2Embedding("facebook/esm2_t30_150M_UR50D")
+    embedding = embedding_generator(fasta)
+    embedding_list = embedding_generator(fasta_list)
+    print(f"FASTA → Embedding (single): {embedding[:10]}... (length: {len(embedding)})")
+    print(
+        f"FASTA → Embedding (batch): {len(embedding_list)} items, first shape: {embedding_list[0].shape}"
+    )
+
+    smi2graph = Smiles2Graph()
+    graph = smi2graph("CCO")
+    graph_list = smi2graph(["CCO", "CC(=O)O"])
+    print(f"SMILES → Graph (single): {graph}")
+    print(f"SMILES → Graph (batch): {graph_list}")
 
     print(
         "\nAll tests completed! All converters now support both single input and batch processing."

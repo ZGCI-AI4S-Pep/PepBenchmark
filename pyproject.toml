@@ -6,11 +6,6 @@ build-backend = "setuptools.build_meta"
 name = "pepbenchmark"
 version = "0.1.0"
 dependencies = [
-    "tqdm",
-    "numpy",
-    "torch",
-    "transformers",
-    "rdkit-pypi",
 ]
 
 [tool.black]

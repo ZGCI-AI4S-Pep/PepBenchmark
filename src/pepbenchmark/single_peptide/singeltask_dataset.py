@@ -33,12 +33,12 @@ BASE_URL = "https://raw.githubusercontent.com/ZGCI-AI4S-Pep/peptide_data/main/"
 # Supported official feature types.
 OFFICIAL_FEATURE_TYPES = {
     "fasta",
-    "fasta_onehot",
-    "fasta_esm2_150",
+    "esm2_150_embedding",
     "smiles",
     "helm",
     "biln",
-    "ecfp",
+    "ecfp4",
+    "ecfp6",
     "random_split",
     "mmseqs2_split",
     "graph",
@@ -51,10 +51,10 @@ FEATURE_FILE_EXTENTION_MAP = {
     "smiles": "csv",
     "helm": "csv",
     "biln": "csv",
-    "ecfp": "npz",
-    "fasta_onehot": "npz",
+    "ecfp4": "npz",
+    "ecfp6": "npz",
     "esm2_150_embedding": "npz",
-    "graph": ".pt",
+    "graph": "pt",
     "random_split": "json",
     "mmseqs2_split": "json",
     "label": "csv",
@@ -69,7 +69,7 @@ class SingleTaskDatasetManager(DatasetManager):
 
     Key features:
         - Support for official datasets and user-defined datasets
-        - Multiple feature types: fasta, fasta_onehot, fasta_esm2_150, smiles, helm, biln, ecfp
+        - Multiple feature types: fasta, fasta_esm2_150, smiles, helm, biln, ecfp
         - Dynamic feature processing and preprocessing cache
         - Official data splits and custom splitting
         - Data augmentation and transformations
@@ -78,7 +78,7 @@ class SingleTaskDatasetManager(DatasetManager):
         # Using official dataset
         dataset = SingleTaskDataset(
             dataset_name="BBP_APML",
-            feature_types=["fasta", "fasta_onehot", "smiles"]
+            feature_types=["fasta", "smiles"]
         )
 
         # Using custom dataset

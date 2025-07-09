@@ -16,7 +16,6 @@ import os
 import subprocess
 from typing import Dict, List
 
-import pandas as pd
 from Bio import SeqIO
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord

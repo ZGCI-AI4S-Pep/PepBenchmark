@@ -1,13 +1,12 @@
 import argparse
+import json
 import os
-from tokenize import Single
 import warnings
-from curses import meta
 
 import pandas as pd
 from pepbenchmark.evaluator import evaluate_classification, evaluate_regression
-from pepbenchmark.single_pred.base_dataset import SingleTaskDatasetManager
-import wandb
+
+
 from torch.utils.data import Dataset
 from transformers import (
     AutoModelForSequenceClassification,
@@ -15,6 +14,7 @@ from transformers import (
     Trainer,
     TrainingArguments,
 )
+from pepbenchmark.single_peptide.singeltask_dataset import SingleTaskDatasetManager
 from pepbenchmark.utils.seed import set_seed
 
 
@@ -24,9 +24,6 @@ warnings.filterwarnings(
 )
 import numpy as np
 from scipy.special import softmax
-from scipy.stats import pearsonr, spearmanr
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
-from sklearn.preprocessing import label_binarize
 from transformers import EarlyStoppingCallback, Trainer, TrainingArguments
 
 from pepbenchmark.metadata import DATASET_MAP
@@ -58,11 +55,10 @@ def binary_classification_compute_metrics(pred):
     """Compute metrics for binary classification tasks."""
 
     labels = pred.label_ids
-    logits = pred.predictions  # 通常为 shape = (batch_size, 2)
+    logits = pred.predictions  
 
-    # 分类预测（取最大概率类别）
     preds = logits.argmax(-1)
-    probs = softmax(logits, axis=-1)[:, 1]  # 取第二列，即正类的概率
+    probs = softmax(logits, axis=-1)[:, 1]
     metrics = evaluate_classification(y_true=labels, y_pred=preds, y_score=probs)
     return metrics
 
@@ -79,11 +75,11 @@ def regression_compute_metrics(pred):
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="TrainingArguments parser")
+    parser = argparse.ArgumentParser(description="PLM-based property prediction")
     parser.add_argument(
         "--task",
         type=str,
-        default="Nonfouling",
+        required=True,
         choices=list(DATASET_MAP.keys()),
         help="Task name from the dataset map",
     )
@@ -92,77 +88,53 @@ def parse_args():
         type=str,
         default="random_split",
         choices=["random_split", "mmseqs2_split"],
+        help="Split type",
     )
     parser.add_argument(
         "--fold_seed",
         type=int,
         default=0,
         choices=[0, 1, 2, 3, 4],
+        help="Fold seed for split",
     )
     parser.add_argument(
         "--model_name",
         type=str,
         default="facebook/esm2_t30_150M_UR50D",
+        help="Pre-trained model name or path",
     )
-    parser.add_argument("--output_dir", type=str, default=None)
-    parser.add_argument("--num_train_epochs", type=int, default=30)
-    parser.add_argument("--learning_rate", type=float, default=5e-5)
-    parser.add_argument("--per_device_train_batch_size", type=int, default=64)
-    parser.add_argument("--warmup_steps", type=int, default=0)
-    parser.add_argument("--weight_decay", type=float, default=0.0)
-    parser.add_argument("--eval_strategy", type=str, default="epoch")
-    parser.add_argument("--save_strategy", type=str, default="best")
-    parser.add_argument("--gradient_accumulation_steps", type=int, default=1)
-    parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--load_best_model_at_end", action="store_true")
-    parser.add_argument("--report_to", type=str, default="all")
-    parser.add_argument("--early_stopping_patience", type=int, default=5)
-    parser.add_argument("--tag", type=str, default=None)
-    parser.add_argument(
-        "--save_dir",
-        type=str,
-        default="./checkpoints",
-        help="Directory to save the model checkpoints and outputs",
-    )
-
+    parser.add_argument("--output_dir", type=str, default="./checkpoints", help="Output directory for model and results")
+    parser.add_argument("--num_train_epochs", type=int, default=30, help="Number of training epochs")
+    parser.add_argument("--learning_rate", type=float, default=5e-5, help="Learning rate")
+    parser.add_argument("--per_device_train_batch_size", type=int, default=64, help="Training batch size per device")
+    parser.add_argument("--warmup_steps", type=int, default=0, help="Number of warmup steps")
+    parser.add_argument("--weight_decay", type=float, default=0.0, help="Weight decay")
+    parser.add_argument("--eval_strategy", type=str, default="epoch", help="Evaluation strategy")
+    parser.add_argument("--save_strategy", type=str, default="best", help="Save strategy")
+    parser.add_argument("--gradient_accumulation_steps", type=int, default=1, help="Gradient accumulation steps")
+    parser.add_argument("--seed", type=int, default=42, help="Random seed")
+    parser.add_argument("--load_best_model_at_end", action="store_true", help="Load best model at end")
+    parser.add_argument("--report_to", type=str, default="all", help="Report to (wandb, tensorboard, etc.)")
+    parser.add_argument("--early_stopping_patience", type=int, default=5, help="Early stopping patience")
     return parser.parse_args()
 
 
-def save_predictions_and_metrics(predictions_output,metrics, prefix, output_dir, dataset):
 
-    preds = predictions_output.predictions
-    labels = predictions_output.label_ids
-
-    # 分类任务取argmax
-    if preds.ndim > 1 and preds.shape[1] > 1:
-        preds = np.argmax(preds, axis=1)
-    else:
-        preds = preds.flatten()
-
-    texts = [dataset[i]["raw_sequence"] for i in range(len(dataset))]
-
-    df_preds = pd.DataFrame({"text": texts, "prediction": preds, "label": labels})
-
-    df_preds.to_csv(os.path.join(output_dir, f"{prefix}_predictions.csv"), index=False)
-    pd.DataFrame([metrics]).to_csv(
-        os.path.join(output_dir, f"{prefix}_metrics.csv"), index=False
-    )
-
-    print(f"✅ Saved {prefix} predictions and metrics (with text) to {output_dir}")
 
 
 if __name__ == "__main__":
+    print("Starting PLM-based property prediction...")
     args = parse_args()
+    print(f"Arguments: {args}")
 
     if args.task not in DATASET_MAP.keys():
         raise ValueError(
             f"Task {args.task} is not supported. Please choose from {list(DATASET_MAP.keys())}."
         )
-    
-
 
     set_seed(args.seed)
-    dataset_manager = SingleTaskDatasetManager(dataset_name=args.task,official_feature_names=["fasta","label"])
+
+    dataset_manager = SingleTaskDatasetManager(dataset_name=args.task, official_feature_names=["fasta", "label"])
 
     dataset_manager.set_official_split_indices(
         split_type=args.split_type, fold_seed=args.fold_seed
@@ -171,10 +143,11 @@ if __name__ == "__main__":
     train_features, valid_features, test_features = dataset_manager.get_train_val_test_features(format="dict")
 
     dataset_metadata = dataset_manager.get_dataset_metadata()
-    tokenizer = AutoTokenizer.from_pretrained(args.model_name)
     max_len = dataset_metadata.get("max_len", 200)
+    task_type = dataset_metadata["type"]
+    tokenizer = AutoTokenizer.from_pretrained(args.model_name)
 
-    train_dataset = SequenceDatasetWithLabels(train_features["official_fasta"],train_features["official_label"], tokenizer, max_len=max_len)
+    train_dataset = SequenceDatasetWithLabels(train_features["official_fasta"], train_features["official_label"], tokenizer, max_len=max_len)
     valid_dataset = SequenceDatasetWithLabels(valid_features["official_fasta"], valid_features["official_label"], tokenizer, max_len=max_len)
     test_dataset = SequenceDatasetWithLabels(test_features["official_fasta"], test_features["official_label"], tokenizer, max_len=max_len)
 
@@ -182,34 +155,34 @@ if __name__ == "__main__":
     print(f"Valid dataset size: {len(valid_dataset)}")
     print(f"Test dataset size: {len(test_dataset)}")
 
-    if args.output_dir is None:
-        args.output_dir = os.path.join(
-            args.save_dir, args.task, args.split_type, args.model_name, str(args.fold_seed)
-        )
+    # Prepare output directory
+    args.output_dir = os.path.join(
+        args.output_dir, args.task, args.split_type, args.model_name.replace("/", "_"), str(args.fold_seed)
+    )
+    os.makedirs(args.output_dir, exist_ok=True)
+    print(f"Output directory: {args.output_dir}")
 
-    task_type = dataset_metadata["type"]
     if task_type not in [
         "binary_classification",
         "multi_class_classification",
         "regression",
     ]:
         raise ValueError(
-            f"Task type {task_type} is not supported. Please choose from 'binary_classification' or 'multi_class_classification'. (current task_type: {task_type})"
+            f"Task type {task_type} is not supported. Please choose from 'binary_classification', 'multi_class_classification', or 'regression'. (current task_type: {task_type})"
         )
 
     if task_type == "binary_classification":
         num_labels = 2
-        compute_metrics = binary_classification_compute_metrics
         model = AutoModelForSequenceClassification.from_pretrained(
             args.model_name, num_labels=num_labels
         )
+        compute_metrics = binary_classification_compute_metrics
+    # TODO: multi_class_classification
     elif task_type == "multi_class_classification":
-        pass
-
+        raise NotImplementedError("Multi-class classification is not yet implemented")
     elif task_type == "regression":
-        num_labels = 1
         model = AutoModelForSequenceClassification.from_pretrained(
-            args.model_name, num_labels=num_labels
+            args.model_name, num_labels=1
         )
         compute_metrics = regression_compute_metrics
 
@@ -244,25 +217,69 @@ if __name__ == "__main__":
             EarlyStoppingCallback(early_stopping_patience=args.early_stopping_patience)
         ],
     )
+    
+    print(f"Training model '{args.model_name}'...")
     trainer.train()
+    print("Training complete. Evaluating...")
 
-    # Predict and save train
-    train_output = trainer.predict(train_dataset, metric_key_prefix="test_train")
-    # 删除前缀
-    metrics = {k.replace("test_train_", ""): v for k, v in train_output.metrics.items()}
-    save_predictions_and_metrics(train_output, metrics,"train", args.output_dir, train_dataset)
+    # Save training arguments
+    training_config = {
+        "model_name": args.model_name,
+        "task": args.task,
+        "split_type": args.split_type,
+        "fold_seed": args.fold_seed,
+        "num_train_epochs": args.num_train_epochs,
+        "learning_rate": args.learning_rate,
+        "per_device_train_batch_size": args.per_device_train_batch_size,
+        "weight_decay": args.weight_decay,
+        "seed": args.seed,
+        "early_stopping_patience": args.early_stopping_patience,
+        "task_type": task_type,
+        "max_len": max_len,
+    }
+    
+    config_path = os.path.join(args.output_dir, "training_config.json")
+    with open(config_path, "w") as f:
+        json.dump(training_config, f, indent=2)
+    print(f"Training config saved to {config_path}")
 
-    # Predict and save valid
-    valid_output = trainer.predict(valid_dataset, metric_key_prefix="test_valid")
-    # 删除前缀
-    metrics = {k.replace("test_valid_", ""): v for k, v in valid_output.metrics.items()}
-    save_predictions_and_metrics(valid_output, metrics,"valid", args.output_dir, valid_dataset)
+    # Evaluate on all splits
+    results = []
+    datasets = [
+        ("Train", train_dataset),
+        ("Validation", valid_dataset), 
+        ("Test", test_dataset)
+    ]
+    
+    for name, dataset in datasets:
+        output = trainer.predict(dataset, metric_key_prefix=f"eval_{name.lower()}")
+        metrics = {k.replace(f"eval_{name.lower()}_", ""): v for k, v in output.metrics.items()}
+        
+        print(f"{name} set metrics: {metrics}")
+        results.append({
+            "Split": name,
+            "Model": args.model_name,
+            **metrics,
+        })
 
-    # Predict and save test
-    test_output = trainer.predict(test_dataset, metric_key_prefix="test_test")
-    # 删除前缀  
-    metrics = {k.replace("test_test_", ""): v for k, v in test_output.metrics.items()}
-    save_predictions_and_metrics(test_output, metrics,"test", args.output_dir, test_dataset)
+    # Save model
+    model_path = os.path.join(args.output_dir, "model")
+    trainer.save_model(model_path)
+    print(f"Model saved to {model_path}")
+    
+    # Save tokenizer
+    tokenizer_path = os.path.join(args.output_dir, "tokenizer")
+    tokenizer.save_pretrained(tokenizer_path)
+    print(f"Tokenizer saved to {tokenizer_path}")
+
+    # Save metrics
+    metrics_path = os.path.join(args.output_dir, "metrics.csv")
+    pd.DataFrame(results).to_csv(metrics_path, index=False)
+    print(f"Metrics saved to {metrics_path}")
+    print("Done.")
 
 
-# WANDB_PROJECT=ttt python finetune_plm.py --num_train_epochs 1  --load_best_model_at_end  --task AV_APML  --per_device_train_batch_size 16 --gradient_accumulation_steps 1 --learning_rate 5e-5 --early_stopping_patience 5 --weight_decay 0.0 --split_type random_split --fold_seed 0 --model_name facebook/esm2_t30_150M_UR50D
+
+
+
+# WANDB_PROJECT=ttt python finetune_plm.py --task AV_APML --num_train_epochs 1 --load_best_model_at_end --per_device_train_batch_size 16 --gradient_accumulation_steps 1 --learning_rate 5e-5 --early_stopping_patience 5 --weight_decay 0.0 --split_type random_split --fold_seed 0 --model_name facebook/esm2_t30_150M_UR50D

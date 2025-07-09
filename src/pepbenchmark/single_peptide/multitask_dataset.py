@@ -20,10 +20,10 @@ import numpy as np
 import pandas as pd
 import requests
 from Bio import SeqIO
-from pepbenchmark.pep_utils.neg_sample import MultiTaskNegSampler
-from pepbenchmark.utils.logging import get_logger
 from torch.utils.data import Dataset
 
+from pepbenchmark.pep_utils.neg_sample import MultiTaskNegSampler
+from pepbenchmark.utils.logging import get_logger
 from src.pepbenchmark.single_peptide.base_dataset import DatasetManager
 
 logger = get_logger()
