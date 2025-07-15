@@ -53,6 +53,7 @@ Example:
 
 # Configure logging for this module``
 import os
+from typing import Any, Optional, Union, List
 
 import numpy as np
 import torch
@@ -92,13 +93,13 @@ class FormatTransform:
     Methods:
         __call__: Abstract method that performs the actual transformation
         _process_single: Process a single input item
-        _handle_batch: Handle batch processing
+        _process_batch: Handle batch processing
     """
 
     def __init__(self):
         self.desc = "Processing batch"
 
-    def __call__(self, inputs, **kwargs):
+    def __call__(self, inputs: Union[Any, List[Any]], **kwargs: Any) -> Union[Any, List[Any]]:
         """Perform the format transformation on single input or batch.
 
         Args:
@@ -111,10 +112,10 @@ class FormatTransform:
         Raises:
             NotImplementedError: This method must be implemented by subclasses
         """
-        return self._handle_batch(inputs, **kwargs)
+        return self._process_batch(inputs, **kwargs)
 
-    def _handle_batch(self, inputs, **kwargs):
-        """Handle batch processing with automatic single/batch detection.
+    def _process_batch(self, inputs: List[Any], **kwargs: Any) ->  List[Any]:
+        """Handle batch processing.
 
         Args:
             inputs: Single input or list of inputs
@@ -133,7 +134,7 @@ class FormatTransform:
             # Single item processing
             return self._process_single(inputs, **kwargs)
 
-    def _process_single(self, input_item, **kwargs):
+    def _process_single(self, input_item: Any, **kwargs: Any) -> Any:
         """Process a single input item.
 
         Args:
@@ -244,7 +245,8 @@ class Fasta2Embedding(FormatTransform):
         >>> print(len(embeddings))  # 2
     """
 
-    def __init__(self, model, device: str = None, pooling: str = "mean"):
+    def __init__(self, model: Union[str, PreTrainedModel], device: Optional[str] = None, pooling: str = "mean"):
+
         super().__init__()
         self.desc = "Generating embeddings"
 
@@ -288,7 +290,7 @@ class Fasta2Embedding(FormatTransform):
         if self.pooling == "mean":
             emb = hidden.mean(dim=1).squeeze(0)
         elif self.pooling == "max":
-            emb = hidden.max(dim=1).values.squeeze(0)
+            emb = hidden.max(dim=1).squeeze(0)
         else:  # 'cls'
             emb = hidden[:, 0, :].squeeze(0)
 
@@ -946,7 +948,7 @@ class Smiles2Graph(FormatTransform):
     """Convert SMILES notation to graph representation.
 
     This converter transforms a SMILES (Simplified Molecular-Input Line-Entry System)
-    string into a graph format suitable for machine learning tasks.
+    string into a pyg graph format suitable for machine learning tasks.
 
     Example:
         >>> converter = Smiles2Graph()
@@ -966,15 +968,16 @@ class Smiles2Graph(FormatTransform):
         super().__init__()
         self.desc = "Converting SMILES to graph representation"
 
-    def _process_single(self, smiles: str, label: torch.Tensor = None) -> dict:
-        """Convert SMILES string to graph representation.
+    def _process_single(self, smiles: str, label: Optional[torch.Tensor] = None) -> Data:
+
+        """Convert SMILES string to graph representation (PyTorch Geometric Data object).
 
         Args:
             smiles (str): SMILES string of the molecule.
             label (torch.Tensor, optional): Label tensor for the graph.
 
         Returns:
-            dict: Graph representation with nodes and edges.
+            Data: Graph representation with nodes and edges (PyTorch Geometric Data object).
         """
         # Convert SMILES to graph format by ogb
         graph_data = smiles2graph(smiles)
@@ -992,7 +995,7 @@ class Smiles2Graph(FormatTransform):
 
         return graph
 
-    def __call__(self, inputs, label: torch.Tensor = None):
+    def __call__(self, inputs: Union[str, List[str]], label: Optional[torch.Tensor] = None) -> Union[Data, List[Data]]:
         """Call method to handle both single and batch inputs.
 
         Args:

@@ -14,7 +14,7 @@
 
 import os
 import subprocess
-from typing import Dict, List
+from typing import Any, Dict, List, Optional
 
 from Bio import SeqIO
 from Bio.Seq import Seq
@@ -25,7 +25,7 @@ from pepbenchmark.utils.logging import get_logger
 logger = get_logger()
 
 
-def save_fasta(fasta_list, path):
+def save_fasta(fasta_list: List[str], path: str) -> None:
     records = [
         SeqRecord(Seq(seq), id=f"seq{i}", description="")
         for i, seq in enumerate(fasta_list)
@@ -33,7 +33,7 @@ def save_fasta(fasta_list, path):
     SeqIO.write(records, path, "fasta")
 
 
-def _add_custom_params(cmd_cluster, params):
+def _add_custom_params(cmd_cluster: List[str], params: Dict[str, Any]) -> None:
     custom_params = {
         k: v
         for k, v in params.items()
@@ -59,7 +59,13 @@ def _add_custom_params(cmd_cluster, params):
             cmd_cluster.extend([f"--{param_name}", str(value)])
 
 
-def _build_mmseqs_cluster_command(db, result, tmp_dir, identity, params):
+def _build_mmseqs_cluster_command(
+    db: str,
+    result: str,
+    tmp_dir: str,
+    identity: float,
+    params: Dict[str, Any],
+) -> List[str]:
     cmd_cluster = [
         "mmseqs",
         "cluster",
@@ -88,8 +94,12 @@ def _build_mmseqs_cluster_command(db, result, tmp_dir, identity, params):
 
 
 def run_mmseqs_clustering(
-    input_fasta: str, output_dir: str, tmp_dir: str, identity: float, **mmseqs_kwargs
-):
+    input_fasta: str,
+    output_dir: str,
+    tmp_dir: str,
+    identity: float,
+    **mmseqs_kwargs: Any,
+) -> str:
     """
     Run MMseqs2 clustering on the input FASTA file.
 
@@ -182,7 +192,12 @@ def parse_cluster_tsv(tsv_path: str) -> Dict[str, List[str]]:
     return cluster_dict
 
 
-def _validate_param(params, key, valid_range, message):
+def _validate_param(
+    params: Dict[str, Any],
+    key: str,
+    valid_range: Any,
+    message: str,
+) -> Optional[str]:
     if key in params:
         value = params[key]
         if isinstance(valid_range, tuple):

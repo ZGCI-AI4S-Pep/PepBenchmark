@@ -64,7 +64,7 @@ def parse_args():
         default='./checkpoints',
         help="Path to save best parameters",
     )
-    parser.add_argument("--fp_type", type=str, default="ecfp6", help="Fingerprint type")
+    parser.add_argument("--fp_type", type=str, default="ecfp6", help="Fingerprint type",choices=["ecfp6", "ecfp4","RDKit","MACCS", "TopologicalTorsion", "AtomPair"])
     parser.add_argument(
         "--n_trials", type=int, default=50, help="Number of Optuna trials"
     )

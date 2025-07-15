@@ -242,6 +242,7 @@ def compute_all_metrics(
         return evaluate_classification(
             y_true, y_pred, y_score, get_recommended_metrics(task_type)
         )
-    if task_type == "regression":
+    elif "regression" in task_type:
         return evaluate_regression(y_true, y_pred, get_recommended_metrics(task_type))
-    raise ValueError(f"Unknown task type: {task_type}")
+    else:
+        raise ValueError(f"Unknown task type: {task_type}")
