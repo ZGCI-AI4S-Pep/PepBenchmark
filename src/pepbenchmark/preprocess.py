@@ -65,8 +65,8 @@ from pepbenchmark.single_peptide.singeltask_dataset import (
     FEATURE_FILE_EXTENTION_MAP,
     OFFICIAL_FEATURE_TYPES,
 )
-from pepbenchmark.splitter.homo_spliter import MMseqs2Spliter
-from pepbenchmark.splitter.random_spliter import RandomSplitter
+from pepbenchmark.splitter.mmseq_splitter import MMseqs2Spliter
+from pepbenchmark.splitter.random_splitter import RandomSplitter
 from pepbenchmark.utils.logging import get_logger
 
 logger = get_logger()

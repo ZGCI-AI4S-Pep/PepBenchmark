@@ -1,19 +1,16 @@
 pepbenchmark package
 ====================
 
-.. automodule:: pepbenchmark
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
 Subpackages
 -----------
 
 .. toctree::
    :maxdepth: 4
 
-   pepbenchmark.dataset_loader
+   pepbenchmark.multi_pred
    pepbenchmark.pep_utils
+   pepbenchmark.single_peptide
+   pepbenchmark.splitter
    pepbenchmark.utils
    pepbenchmark.visualization
 
@@ -28,10 +25,10 @@ pepbenchmark.evaluator module
    :undoc-members:
    :show-inheritance:
 
-pepbenchmark.example module
----------------------------
+pepbenchmark.exceptions module
+------------------------------
 
-.. automodule:: pepbenchmark.example
+.. automodule:: pepbenchmark.exceptions
    :members:
    :undoc-members:
    :show-inheritance:
@@ -40,6 +37,22 @@ pepbenchmark.metadata module
 ----------------------------
 
 .. automodule:: pepbenchmark.metadata
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+pepbenchmark.preprocess module
+------------------------------
+
+.. automodule:: pepbenchmark.preprocess
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Module contents
+---------------
+
+.. automodule:: pepbenchmark
    :members:
    :undoc-members:
    :show-inheritance:

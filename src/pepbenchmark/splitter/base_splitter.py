@@ -27,24 +27,20 @@ class SPLIT(Enum):
     """Enumeration for different split types."""
 
     RANDOM = "random"
-    STRATIFIED = "stratified"
-    HOMOLOGY = "homology"
-    TEMPORAL = "temporal"
-    CLUSTER = "cluster"
+    MMSEQS = "mmseqs"
 
 
 class BaseSplitter(ABC):
     """
     Abstract base class for all data splitters.
-
-    This class defines the interface that all splitter implementations must follow.
-    It provides common functionality and validation methods that can be reused
-    across different splitting strategies.
+    
+    This class defines the pure interface that all splitter implementations must follow.
+    
+    Result Key Naming Conventions:
+    - get_split_indices_n(): Returns keys as "seed_X" (X = 0 to n_splits-1)
+    - get_split_kfold_indices(): Returns keys as "fold_X" (X = 0 to k_folds-1)
+    - get_split_indices(): Returns single dict with "train", "valid", "test" keys
     """
-
-    def __init__(self):
-        self.logger = get_logger(self.__class__.__name__)
-        self._last_split_info = None
 
     @abstractmethod
     def get_split_indices(
@@ -69,60 +65,18 @@ class BaseSplitter(ABC):
 
         Returns:
             Dictionary with 'train', 'valid', 'test' keys containing indices
+            {
+                "train": [1,2,...],
+                "valid": [3,4,...],
+                "test": [5,6,...],
+            }
 
         Raises:
             NotImplementedError: Must be implemented by subclasses
         """
         raise NotImplementedError("This method must be implemented by subclasses.")
 
-    def get_split_indices_n(
-        self,
-        data: Union[List, np.ndarray],
-        n_splits: int = 5,
-        frac_train: float = 0.8,
-        frac_valid: float = 0.1,
-        frac_test: float = 0.1,
-        seed: Optional[int] = 42,
-        **kwargs,
-    ) -> Dict[str, Dict[str, Union[List[int], np.ndarray]]]:
-        """
-        Generate multiple random splits with different seeds.
-
-        Args:
-            data: Input data to split
-            n_splits: Number of random splits to generate
-            frac_train: Fraction of data for training
-            frac_valid: Fraction of data for validation
-            frac_test: Fraction of data for testing
-            seed: Base random seed for reproducibility
-            **kwargs: Additional splitter-specific parameters
-
-        Returns:
-            Dictionary with split results keyed by 'seed_i'
-        """
-        self.logger.info(f"Generating {n_splits} random splits with base seed {seed}")
-        self._validate_fractions(frac_train, frac_valid, frac_test)
-
-        split_results = {}
-        for i in range(n_splits):
-            current_seed = seed + i if seed is not None else None
-            self.logger.info(
-                f"Generating split {i + 1}/{n_splits} with seed {current_seed}"
-            )
-
-            split_indices = self.get_split_indices(
-                data, frac_train, frac_valid, frac_test, seed=current_seed, **kwargs
-            )
-
-            split_results[f"seed_{i}"] = split_indices
-            self.logger.info(
-                f"Split {i + 1} completed: Train={len(split_indices['train'])}, "
-                f"Valid={len(split_indices['valid'])}, Test={len(split_indices['test'])}"
-            )
-
-        self.logger.info(f"All {n_splits} random splits completed successfully")
-        return split_results
-
+    @abstractmethod
     def get_split_kfold_indices(
         self,
         data: Union[List, np.ndarray],
@@ -133,69 +87,142 @@ class BaseSplitter(ABC):
         """
         Generate k-fold cross-validation splits.
 
-        This is a default implementation that can be overridden by subclasses
-        for more sophisticated k-fold strategies.
-
         Args:
             data: Input data to split
             k_folds: Number of folds for cross-validation
             seed: Random seed for reproducibility
             **kwargs: Additional splitter-specific parameters
+            
 
         Returns:
-            Dictionary with k-fold splits keyed by 'fold_i'
+            Dictionary with keys in format "fold_X" where X is the fold index (0 to k_folds-1).
+            Each fold contains train/valid/test splits where the test set is the X-th fold.
+            Example:
+            {
+                "fold_0": {"train": [1,2,...], "valid": [3,4,...], "test": [5,6,...]},
+                "fold_1": {"train": [...], "valid": [...], "test": [...]},
+                ...
+                "fold_k": {"train": [...], "valid": [...], "test": [...]}
+            }
         """
-        self.logger.info(f"Generating {k_folds}-fold cross-validation splits")
+        raise NotImplementedError("This method must be implemented by subclasses.")
 
-        # Generate a random permutation for all folds
-        if seed is not None:
-            perm = np.random.RandomState(seed).permutation(len(data))
-        else:
-            perm = np.random.permutation(len(data))
+    def get_split_indices_n(
+        self,
+        data: Union[List, np.ndarray],
+        n_splits: int = 5,
+        frac_train: float = 0.8,
+        frac_valid: float = 0.1,
+        frac_test: float = 0.1,
+        seed: Union[List[int], int] = 42,
+        **kwargs,
+    ) -> Dict[str, Dict[str, Union[List[int], np.ndarray]]]:
+        """
+        Generate multiple random splits with different seeds.
+        
+        This method provides a default implementation that can be overridden by subclasses.
+        Repeat `get_split_indices()` with different seeds n_splits times by default.
 
-        # Split data into k roughly equal folds
-        fold_size = len(data) // k_folds
-        folds = []
-        for i in range(k_folds):
-            start_idx = i * fold_size
-            if i == k_folds - 1:  # Last fold gets any remaining data
-                end_idx = len(data)
-            else:
-                end_idx = (i + 1) * fold_size
-            folds.append(perm[start_idx:end_idx])
-
-        # Generate k-fold splits
-        kfold_results = {}
-        for fold_idx in range(k_folds):
-            test_indices = folds[fold_idx]
-
-            # Remaining folds for train/valid
-            remaining_indices = []
-            for i in range(k_folds):
-                if i != fold_idx:
-                    remaining_indices.extend(folds[i])
-
-            # Split remaining data into train and valid (80% train, 20% valid)
-            np.random.RandomState(seed + fold_idx).shuffle(remaining_indices)
-            train_size = int(len(remaining_indices) * 0.8)
-            train_indices = remaining_indices[:train_size]
-            valid_indices = remaining_indices[train_size:]
-
-            kfold_results[f"fold_{fold_idx}"] = {
-                "train": np.array(train_indices),
-                "valid": np.array(valid_indices),
-                "test": np.array(test_indices),
+        Args:
+            data: Input data to split
+            n_splits: Number of splits to generate (default: 5)
+            frac_train: Fraction of data for training (default: 0.8)
+            frac_valid: Fraction of data for validation (default: 0.1)
+            frac_test: Fraction of data for testing (default: 0.1)
+            seed: Random seed or list of seeds for reproducibility
+            **kwargs: Additional splitter-specific parameters
+        Returns:
+            Dictionary with keys in format "seed_X" where X is the split index (0 to n_splits-1).
+            Each split contains train/valid/test splits with the specified fractions.
+            Example:
+            {
+                "seed_0": {"train": [1,2,...], "valid": [3,4,...], "test": [5,6,...]},
+                "seed_1": {"train": [...], "valid": [...], "test": [...]},
+                ...
+                "seed_n": {"train": [...], "valid": [...], "test": [...]}
             }
 
-            self.logger.info(
-                f"Fold {fold_idx} completed: Train={len(train_indices)}, "
-                f"Valid={len(valid_indices)}, Test={len(test_indices)}"
+        """
+        return self._get_split_indices_n_default(
+            data, n_splits, frac_train, frac_valid, frac_test, seed, **kwargs
+        )
+
+    def _get_split_indices_n_default(
+        self,
+        data: Union[List, np.ndarray],
+        n_splits: int,
+        frac_train: float,
+        frac_valid: float,
+        frac_test: float,
+        seed: Union[List[int], int],
+        **kwargs,
+    ) -> Dict[str, Dict[str, Union[List[int], np.ndarray]]]:
+        """Default implementation for multiple splits."""
+        if not isinstance(data, (list, np.ndarray)):
+            raise TypeError("Data must be a list or numpy array")
+        
+        if n_splits <= 0:
+            raise ValueError(f"n_splits must be positive, got {n_splits}")
+
+        # Prepare seeds
+        if isinstance(seed, list):
+            if len(seed) != n_splits:
+                raise ValueError(
+                    f"Expected {n_splits} seeds, but got {len(seed)}. "
+                    f"Please provide a seed for each split."
+                )
+            seeds = seed
+        elif isinstance(seed, int):
+            seeds = [seed + i for i in range(n_splits)]
+        else:
+            raise ValueError(
+                "Seed must be an integer or a list of integers. "
+                "If using a list, it should have the same length as n_splits."
             )
 
-        self.logger.info(f"All {k_folds} k-fold splits completed successfully")
-        return kfold_results
+        split_results = {}
+        logger.info(f"Generating {n_splits} splits")
+        
+        for i, current_seed in enumerate(seeds):
+            logger.info(f"Generating split {i + 1}/{n_splits} with seed {current_seed}")
 
-    def _validate_fractions(
+            split_indices = self.get_split_indices(
+                data, frac_train, frac_valid, frac_test, seed=current_seed, **kwargs
+            )
+
+            logger.info(
+                f"Split {i + 1} completed: Train={len(split_indices['train'])}, "
+                f"Valid={len(split_indices['valid'])}, Test={len(split_indices['test'])}"
+            )
+            split_results[f"seed_{i}"] = split_indices
+
+        logger.info(f"All {n_splits} splits completed successfully")
+        return split_results
+
+
+class AbstractSplitter(BaseSplitter):
+    """
+    Abstract splitter class that provides common functionality for concrete splitters.
+    
+    This class contains shared methods for validation, statistics, and I/O operations.
+    All concrete splitters should inherit from this class instead of BaseSplitter directly.
+    
+    Result Key Naming Conventions:
+    - get_split_indices_n(): Returns keys as "seed_X" (X = 0 to n_splits-1)
+    - get_split_kfold_indices(): Returns keys as "fold_X" (X = 0 to k_folds-1)
+    - get_split_indices(): Returns single dict with "train", "valid", "test" keys
+    """
+
+    def __init__(self):
+        """
+        Initialize the AbstractSplitter.
+        
+        Sets up logging and initializes internal state tracking.
+        """
+        self.logger = get_logger(self.__class__.__name__)
+        self._last_split_info = None
+
+    def validate_fractions(
         self, frac_train: float, frac_valid: float, frac_test: float
     ) -> None:
         """
@@ -216,37 +243,36 @@ class BaseSplitter(ABC):
         if any(frac < 0 for frac in [frac_train, frac_valid, frac_test]):
             raise ValueError("All fractions must be non-negative")
 
-    def _validate_data(self, data: Union[List, np.ndarray]) -> None:
+    def validate_split_keys(self, split_results: Dict[str, Any]) -> None:
         """
-        Validate input data.
-
+        Validate that the split dictionary contains the required keys.
+        
         Args:
-            data: Input data to validate
-
+            split_results: Dictionary containing split results
+            
         Raises:
-            ValueError: If data is empty or invalid
+            ValueError: If required keys are missing
         """
-        if data is None:
-            raise ValueError("Data cannot be None")
-
-        if len(data) == 0:
-            raise ValueError("Data cannot be empty")
-
-        if len(data) < 3:
-            self.logger.warning(f"Very small dataset with only {len(data)} samples")
-
-    def _validate_split_keys(self, split_results: Dict[str, Any]) -> None:
-        """Validate that the split dictionary contains the required keys."""
         required_keys = {"train", "valid", "test"}
         if not required_keys.issubset(split_results.keys()):
             raise ValueError(
                 f"Split results must contain {required_keys}, but got {split_results.keys()}"
             )
 
-    def _validate_split_indices(
+    def validate_split_indices(
         self, split_results: Dict[str, Union[List[int], np.ndarray]], data_size: int
     ) -> None:
-        """Validate that indices in splits are within the valid range."""
+        """
+        Validate that indices in splits are within the valid range.
+        
+        Args:
+            split_results: Dictionary containing split results with indices
+            data_size: Size of the original dataset
+            
+        Raises:
+            TypeError: If indices are not of correct type
+            ValueError: If indices are out of bounds
+        """
         for key, indices in split_results.items():
             if not isinstance(indices, (list, np.ndarray)):
                 raise TypeError(f"Indices for {key} must be a list or numpy array")
@@ -257,19 +283,31 @@ class BaseSplitter(ABC):
                     f"Indices for {key} are out of bounds for data of size {data_size}"
                 )
 
-    def _check_split_completeness(
+    def check_split_completeness(
         self, all_indices: np.ndarray, data_size: int
     ) -> None:
-        """Check if the splits cover the entire dataset."""
+        """
+        Check if the splits cover the entire dataset.
+        
+        Args:
+            all_indices: Array of all indices from all splits
+            data_size: Expected size of the dataset
+        """
         if len(all_indices) != data_size:
             self.logger.warning(
                 f"Split is not complete. Expected {data_size} unique indices, but got {len(all_indices)}"
             )
 
-    def _check_split_overlaps(
+    def check_split_overlaps(
         self, all_indices: np.ndarray, total_indices: int
     ) -> None:
-        """Check for overlapping indices between splits."""
+        """
+        Check for overlapping indices between splits.
+        
+        Args:
+            all_indices: Array of unique indices from all splits
+            total_indices: Total number of indices across all splits
+        """
         if len(all_indices) != total_indices:
             self.logger.warning(
                 f"Overlapping indices found. Total indices: {total_indices}, Unique indices: {len(all_indices)}"
@@ -295,8 +333,8 @@ class BaseSplitter(ABC):
             True if validation passes, False otherwise
         """
         try:
-            self._validate_split_keys(split_results)
-            self._validate_split_indices(split_results, data_size)
+            self.validate_split_keys(split_results)
+            self.validate_split_indices(split_results, data_size)
 
             train_indices = np.array(split_results["train"])
             valid_indices = np.array(split_results["valid"])
@@ -308,47 +346,36 @@ class BaseSplitter(ABC):
             )
 
             if check_completeness:
-                self._check_split_completeness(all_indices, data_size)
+                self.check_split_completeness(all_indices, data_size)
 
             if check_overlaps:
-                self._check_split_overlaps(all_indices, total_indices)
+                self.check_split_overlaps(all_indices, total_indices)
 
             return True
         except (ValueError, TypeError) as e:
             self.logger.error(f"Split validation failed: {e}")
             return False
 
-    def get_last_split_info(self) -> Optional[Dict[str, Any]]:
-        """
-        Get information about the last performed split.
-
-        Returns:
-            Dictionary containing last split information, or None if no split has been performed
-        """
-        return self._last_split_info
-
-    def _set_last_split_info(self, split_info: Dict[str, Any]) -> None:
-        """
-        Set internal information about the last performed split.
-
-        This is for internal use only and should not be called directly by users.
-
-        Args:
-            split_info: Dictionary containing split information
-        """
-        self._last_split_info = split_info
-
     def get_split_statistics(
         self, split_results: Dict[str, Union[List[int], np.ndarray]]
     ) -> Dict[str, Any]:
         """
-        Get statistics about the split results.
+        Get comprehensive statistics about the split results.
 
         Args:
             split_results: Dictionary with train/valid/test indices
 
         Returns:
-            Dictionary containing split statistics
+            Dictionary containing split statistics:
+            {
+                "train_size": int,
+                "valid_size": int,
+                "test_size": int,
+                "train_fraction": float,
+                "valid_fraction": float,
+                "test_fraction": float,
+                "total_size": int
+            }
         """
         stats = {}
         total_size = sum(len(split_results[key]) for key in ["train", "valid", "test"])
@@ -367,17 +394,24 @@ class BaseSplitter(ABC):
         self, split_results: Dict[str, Any], filepath: str, format: str = "json"
     ) -> None:
         """
-        Save split results to file.
+        Save split results to file in specified format.
 
         Args:
-            split_results: Split results to save
+            split_results: Split results to save (can be single split or multiple splits)
             filepath: Output file path
             format: Output format ('json' or 'numpy')
+            
+        Raises:
+            ValueError: If format is not supported
+            IOError: If file cannot be written
         """
         import json
         import os
 
-        os.makedirs(os.path.dirname(filepath), exist_ok=True)
+        # Only create directory if filepath contains a directory part
+        dir_path = os.path.dirname(filepath)
+        if dir_path:
+            os.makedirs(dir_path, exist_ok=True)
 
         if format == "json":
             # Convert numpy arrays to lists for JSON serialization
@@ -412,7 +446,12 @@ class BaseSplitter(ABC):
             format: Input format ('json' or 'numpy')
 
         Returns:
-            Dictionary containing split results
+            Dictionary containing split results (automatically converts lists to numpy arrays)
+            
+        Raises:
+            ValueError: If format is not supported
+            FileNotFoundError: If file doesn't exist
+            IOError: If file cannot be read
         """
         import json
 
