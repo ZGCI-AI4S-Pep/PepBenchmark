@@ -11,3 +11,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+from .base_splitter import BaseSplitter, AbstractSplitter, SPLIT
+from .random_splitter import RandomSplitter
+from .mmseq_splitter import MMseqs2Splitter
+
+__all__ = [
+    "BaseSplitter",
+    "AbstractSplitter", 
+    "RandomSplitter",
+    "MMseqs2Splitter",
+    "SPLIT",
+]

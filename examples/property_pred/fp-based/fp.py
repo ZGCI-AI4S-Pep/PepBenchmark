@@ -73,7 +73,7 @@ def parse_args():
         default='./checkpoints',
         help="Path to save trained model and parameters",
     )
-    parser.add_argument("--fp_type", type=str, default="ecfp6", help="Fingerprint type")
+    parser.add_argument("--fp_type", type=str, default="ecfp6", help="Fingerprint type",choices=["ecfp6", "ecfp4","RDKit","MACCS", "TopologicalTorsion", "AtomPair"])
 
     return parser.parse_args()
 

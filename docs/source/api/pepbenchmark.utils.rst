@@ -1,42 +1,29 @@
 pepbenchmark.utils package
 ==========================
 
-.. automodule:: pepbenchmark.utils
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
 Submodules
 ----------
 
-pepbenchmark.utils.augmentation module
---------------------------------------
+pepbenchmark.utils.logging module
+---------------------------------
 
-.. automodule:: pepbenchmark.utils.augmentation
+.. automodule:: pepbenchmark.utils.logging
    :members:
    :undoc-members:
    :show-inheritance:
 
-pepbenchmark.utils.load module
+pepbenchmark.utils.seed module
 ------------------------------
 
-.. automodule:: pepbenchmark.utils.load
+.. automodule:: pepbenchmark.utils.seed
    :members:
    :undoc-members:
    :show-inheritance:
 
-pepbenchmark.utils.retrieve module
-----------------------------------
+Module contents
+---------------
 
-.. automodule:: pepbenchmark.utils.retrieve
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-pepbenchmark.utils.split module
--------------------------------
-
-.. automodule:: pepbenchmark.utils.split
+.. automodule:: pepbenchmark.utils
    :members:
    :undoc-members:
    :show-inheritance:
