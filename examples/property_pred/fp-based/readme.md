@@ -12,7 +12,7 @@
 
 #### 使用方法：
 ```bash
-python fp.py --task AV_APML --split_type random_split --fp_type ecfp6 --output_dir ./checkpoints
+python fp.py --task Antimicrobial --model lightgbm --split_type random_split --fp_type ecfp6 --output_dir ./checkpoints
 ```
 #### 主要参数：
 - `--task`: 任务名称（如 AV_APML）
@@ -58,14 +58,13 @@ python fp_tune.py --task AV_APML --split_type random_split --fp_type ecfp6 --mod
 ### 3. run_one_dataset.sh - 批量运行脚本
 一次性跑一个数据集的两种划分方式的5个种子：
 ```bash
-bash run_one_dataset.sh AV_APML
+bash run_one_dataset.sh Antimicrobial
 ```
 
 
 
 ### 4. run_all.sh 
 调用run_one_dataset.sh ,跑所有数据
-
 
 
 
