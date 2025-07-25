@@ -22,7 +22,7 @@ import requests
 import torch
 from torch.utils.data import Dataset
 
-from pepbenchmark.metadata import DATASET_MAP
+from pepbenchmark.raw_data import DATASET_MAP
 from pepbenchmark.single_peptide.base_dataset import DatasetManager
 from pepbenchmark.utils.logging import get_logger
 
@@ -34,6 +34,7 @@ BASE_URL = "https://raw.githubusercontent.com/ZGCI-AI4S-Pep/peptide_data/main/"
 OFFICIAL_FEATURE_TYPES = {
     "fasta",
     "esm2_150_embedding",
+    "dpml_embedding",
     "smiles",
     "helm",
     "biln",
@@ -41,6 +42,7 @@ OFFICIAL_FEATURE_TYPES = {
     "ecfp6",
     "random_split",
     "mmseqs2_split",
+    "cdhit_split",
     "graph",
     "label",
 }
@@ -54,9 +56,11 @@ FEATURE_FILE_EXTENTION_MAP = {
     "ecfp4": "npz",
     "ecfp6": "npz",
     "esm2_150_embedding": "npz",
+    "dpml_embedding": "npz",
     "graph": "pt",
     "random_split": "json",
     "mmseqs2_split": "json",
+    "cdhit_split": "json",
     "label": "csv",
 }
 
@@ -253,6 +257,14 @@ class SingleTaskDatasetManager(DatasetManager):
                 f"User feature {feature_name} not found in dataset, cannot remove"
             )
 
+    def get_positive_sequences(self) -> List[str]:
+        fasta_list = self.get_official_feature("fasta")
+        label_list = self.get_official_feature("label")
+        self.pos_seqs = [
+            seq for seq, label in zip(fasta_list, label_list) if label == 1
+        ]
+        return self.pos_seqs
+
     def _download_official_feature(self, feature_name: str) -> None:
         """Downloads the data file for the specified feature type."""
 
@@ -281,46 +293,6 @@ class SingleTaskDatasetManager(DatasetManager):
         except requests.RequestException as e:
             logger.error(f"Failed to download {feature_name}: {e}")
             raise
-
-    def set_negative_samples(self, neg_seqs: List[str]):
-        """
-        Removes original negative samples, then re-samples negatives and adds them back.
-
-        Args:
-            neg_seqs: List of negative sequences.
-        """
-        if (
-            "fasta" not in self.official_feature_dict
-            or "label" not in self.official_feature_dict
-        ):
-            raise ValueError(
-                "Dataset must set official 'fasta' and 'label' features first."
-            )
-
-        fasta_list = self.get_official_feature("fasta")
-        label_list = self.get_official_feature("label")
-        pos_seqs = [seq for seq, label in zip(fasta_list, label_list) if label == 1]
-        augmented_fasta = pd.Series(pos_seqs + neg_seqs)
-        augmented_label = pd.Series([1] * len(pos_seqs) + [0] * len(neg_seqs))
-
-        self.official_feature_dict["fasta"] = augmented_fasta
-        self.official_feature_dict["label"] = augmented_label
-        self.length = len(augmented_fasta)
-
-        official_remain = [
-            k for k in self.official_feature_dict.keys() if k not in ("fasta", "label")
-        ]
-        if official_remain:
-            for feature_name in official_remain:
-                self.remove_official_feature(feature_name)
-            logger.info(f"Official features {official_remain} need to be recomputed.")
-
-        if self.user_feature_dict:
-            for key in list(self.user_feature_dict.keys()):
-                self.remove_user_feature(key)
-            logger.info(
-                f"User features {list(self.user_feature_dict.keys())} need to be recomputed."
-            )
 
     def set_official_split_indices(
         self, split_type: str = "random_split", fold_seed: int = 0
@@ -451,23 +423,6 @@ class SingleTaskDatasetManager(DatasetManager):
 
         else:
             raise ValueError(f"Unsupported format: {format}")
-
-    def set_remain_feature(self, remain_index: List[int]):
-        """Set remain feature by remain_index after removing redundant sequences."""
-        remain_official_feature = {}
-        remain_user_feature = {}
-        for feature_name, feature_data in self.official_feature_dict.items():
-            remain_official_feature[feature_name] = feature_data.loc[
-                remain_index
-            ].reset_index(drop=True)
-        for feature_name, feature_data in self.user_feature_dict.items():
-            remain_user_feature[feature_name] = feature_data.loc[
-                remain_index
-            ].reset_index(drop=True)
-        self.official_feature_dict = remain_official_feature
-        self.user_feature_dict = remain_user_feature
-        self.length = len(remain_index)
-        logger.info("Set remain feature successfully")
 
     def __len__(self) -> int:
         """Returns the length of the dataset."""

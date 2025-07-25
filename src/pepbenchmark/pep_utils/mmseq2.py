@@ -124,7 +124,7 @@ def run_mmseqs_clustering(
     """
     # Default MMseqs2 parameters
     default_params = {
-        "coverage": 0.25,
+        "coverage": 0.7,
         "sensitivity": 10,
         "alignment_mode": 3,
         "seq_id_mode": 1,
@@ -190,6 +190,24 @@ def parse_cluster_tsv(tsv_path: str) -> Dict[str, List[str]]:
                 cluster_dict[rep] = []
             cluster_dict[rep].append(member)
     return cluster_dict
+
+
+def get_representative_ids_mmseq(tsv_path: str) -> List[str]:
+    """
+    Extract representative sequence IDs from MMseqs2 clustering result TSV.
+
+    Args:
+        tsv_path: Path to the cluster_map.tsv file.
+
+    Returns:
+        List of representative sequence IDs.
+    """
+    rep_ids = set()
+    with open(tsv_path, "r") as f:
+        for line in f:
+            rep, member = line.strip().split("\t")
+            rep_ids.add(rep)
+    return sorted(rep_ids)
 
 
 def _validate_param(

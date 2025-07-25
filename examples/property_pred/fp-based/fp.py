@@ -22,7 +22,7 @@ from sklearn.svm import SVC
 from pepbenchmark.single_peptide.singeltask_dataset import SingleTaskDatasetManager
 from pepbenchmark.utils.seed import set_seed
 from xgboost import XGBClassifier
-from pepbenchmark.metadata import DATASET_MAP
+from pepbenchmark.raw_data import DATASET_MAP
 
 from pepbenchmark.pep_utils.convert import Fasta2Smiles, Smiles2FP
 from pepbenchmark.evaluator import evaluate_classification
@@ -53,7 +53,7 @@ def parse_args():
         "--split_type",
         type=str,
         default="mmseqs2_split",
-        choices=["random_split", "mmseqs2_split"],
+        choices=["random_split", "mmseqs2_split", "cdhit_split"],
         help="Split type",
     )
     parser.add_argument(
