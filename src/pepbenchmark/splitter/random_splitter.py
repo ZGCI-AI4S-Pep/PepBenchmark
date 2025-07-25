@@ -12,11 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Dict, Union, List, Optional
+from typing import Dict, List, Optional, Union
+
 import numpy as np
 
-from pepbenchmark.utils.logging import get_logger
 from pepbenchmark.splitter.base_splitter import AbstractSplitter
+from pepbenchmark.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -24,10 +25,10 @@ logger = get_logger(__name__)
 class RandomSplitter(AbstractSplitter):
     """
     Random data splitter that randomly shuffles data before splitting.
-    
+
     This splitter performs completely random splits without considering
     sequence similarity or any other relationships in the data.
-    
+
     Result Key Naming Conventions:
     - get_split_indices_n(): Returns keys as "seed_X" (X = 0 to n_splits-1)
     - get_split_kfold_indices(): Returns keys as "fold_X" (X = 0 to k_folds-1)
@@ -35,20 +36,20 @@ class RandomSplitter(AbstractSplitter):
     """
 
     def get_split_indices(
-        self, 
-        data: Union[List, np.ndarray], 
-        frac_train: float = 0.8, 
-        frac_valid: float = 0.1, 
-        frac_test: float = 0.1, 
-        seed: Optional[int] = 42, 
-        **kwargs
+        self,
+        data: Union[List, np.ndarray],
+        frac_train: float = 0.8,
+        frac_valid: float = 0.1,
+        frac_test: float = 0.1,
+        seed: Optional[int] = 42,
+        **kwargs,
     ) -> Dict[str, Union[List[int], np.ndarray]]:
         """
         Generate random split indices.
-        
+
         This method randomly shuffles the data indices and then splits them
         according to the specified fractions.
-        
+
         Args:
             data: Input data to split (List or numpy array)
             frac_train: Fraction of data for training (default: 0.8)
@@ -56,7 +57,7 @@ class RandomSplitter(AbstractSplitter):
             frac_test: Fraction of data for testing (default: 0.1)
             seed: Random seed for reproducibility (default: 42)
             **kwargs: Additional parameters (ignored for random splitting)
-            
+
         Returns:
             Dictionary containing train/valid/test split indices:
             {
@@ -64,7 +65,7 @@ class RandomSplitter(AbstractSplitter):
                 "valid": [indices for validation set],
                 "test": [indices for test set]
             }
-            
+
         Raises:
             ValueError: If fractions don't sum to 1.0 or are invalid
         """
@@ -90,8 +91,8 @@ class RandomSplitter(AbstractSplitter):
         # Create split indices
         split_result = {
             "train": perm[:train_size],
-            "valid": perm[train_size:train_size + valid_size],
-            "test": perm[train_size + valid_size:],
+            "valid": perm[train_size : train_size + valid_size],
+            "test": perm[train_size + valid_size :],
         }
 
         logger.info(
@@ -164,11 +165,11 @@ class RandomSplitter(AbstractSplitter):
                 rng.shuffle(remaining_indices)
             else:
                 np.random.shuffle(remaining_indices)
-                
+
             train_size = int(len(remaining_indices) * 0.8)
             train_indices = remaining_indices[:train_size]
             valid_indices = remaining_indices[train_size:]
-            
+
             kfold_results[f"fold_{fold_idx}"] = {
                 "train": np.array(train_indices),
                 "valid": np.array(valid_indices),
@@ -244,23 +245,25 @@ if __name__ == "__main__":
 
     # Test saving and loading single split results
     import os
-    
+
     # Save single split results in both JSON and numpy formats
     json_path = "single_split.json"
     numpy_path = "single_split.npz"
-    
+
     # Save in JSON format
     splitter.save_split_results(single_split, json_path, format="json")
     logger.info(f"Single split saved to JSON: {json_path}")
-    
+
     # Save in numpy format
     splitter.save_split_results(single_split, numpy_path, format="numpy")
     logger.info(f"Single split saved to numpy: {numpy_path}")
-    
+
     # Load and verify JSON format
     loaded_json = splitter.load_split_results(json_path, format="json")
-    logger.info(f"Loaded JSON split - Train: {len(loaded_json['train'])}, Valid: {len(loaded_json['valid'])}, Test: {len(loaded_json['test'])}")
-    
+    logger.info(
+        f"Loaded JSON split - Train: {len(loaded_json['train'])}, Valid: {len(loaded_json['valid'])}, Test: {len(loaded_json['test'])}"
+    )
+
     # Verify loaded data matches original
     for split_name in ["train", "valid", "test"]:
         original_indices = set(single_split[split_name])
@@ -269,11 +272,13 @@ if __name__ == "__main__":
             logger.info(f"✓ {split_name} split matches after JSON load")
         else:
             logger.error(f"✗ {split_name} split mismatch after JSON load")
-    
+
     # Load and verify numpy format
     loaded_numpy = splitter.load_split_results(numpy_path, format="numpy")
-    logger.info(f"Loaded numpy split - Train: {len(loaded_numpy['train'])}, Valid: {len(loaded_numpy['valid'])}, Test: {len(loaded_numpy['test'])}")
-    
+    logger.info(
+        f"Loaded numpy split - Train: {len(loaded_numpy['train'])}, Valid: {len(loaded_numpy['valid'])}, Test: {len(loaded_numpy['test'])}"
+    )
+
     # Verify loaded data matches original
     for split_name in ["train", "valid", "test"]:
         original_indices = set(single_split[split_name])
@@ -282,15 +287,15 @@ if __name__ == "__main__":
             logger.info(f"✓ {split_name} split matches after numpy load")
         else:
             logger.error(f"✗ {split_name} split mismatch after numpy load")
-    
+
     # Test saving and loading multiple splits
     multi_splits_path = "random_splits.json"
     splitter.save_split_results(random_splits, multi_splits_path, format="json")
     logger.info(f"Multiple splits saved to: {multi_splits_path}")
-    
+
     loaded_multi = splitter.load_split_results(multi_splits_path, format="json")
     logger.info(f"Loaded multiple splits with keys: {list(loaded_multi.keys())}")
-    
+
     # Verify structure of loaded multiple splits
     for split_key in random_splits.keys():
         if split_key in loaded_multi:
@@ -298,33 +303,41 @@ if __name__ == "__main__":
                 original_count = len(random_splits[split_key][split_name])
                 loaded_count = len(loaded_multi[split_key][split_name])
                 if original_count == loaded_count:
-                    logger.info(f"✓ {split_key}.{split_name} count matches ({original_count})")
+                    logger.info(
+                        f"✓ {split_key}.{split_name} count matches ({original_count})"
+                    )
                 else:
-                    logger.error(f"✗ {split_key}.{split_name} count mismatch: {original_count} vs {loaded_count}")
+                    logger.error(
+                        f"✗ {split_key}.{split_name} count mismatch: {original_count} vs {loaded_count}"
+                    )
         else:
             logger.error(f"✗ Missing split key: {split_key}")
-    
+
     # Test saving and loading k-fold splits
     kfold_splits_path = "kfold_splits.json"
     splitter.save_split_results(kfold_splits, kfold_splits_path, format="json")
     logger.info(f"K-fold splits saved to: {kfold_splits_path}")
-    
+
     loaded_kfold = splitter.load_split_results(kfold_splits_path, format="json")
     logger.info(f"Loaded k-fold splits with keys: {list(loaded_kfold.keys())}")
-    
+
     # Test get_split_statistics
     stats = splitter.get_split_statistics(single_split)
     logger.info(f"Split statistics: {stats}")
-    
+
     # Verify statistics
     expected_total = len(fasta)
     if stats["total_size"] == expected_total:
         logger.info(f"✓ Total size matches: {expected_total}")
     else:
-        logger.error(f"✗ Total size mismatch: expected {expected_total}, got {stats['total_size']}")
-    
+        logger.error(
+            f"✗ Total size mismatch: expected {expected_total}, got {stats['total_size']}"
+        )
+
     # Check that fractions sum to approximately 1.0
-    total_fraction = stats["train_fraction"] + stats["valid_fraction"] + stats["test_fraction"]
+    total_fraction = (
+        stats["train_fraction"] + stats["valid_fraction"] + stats["test_fraction"]
+    )
     if abs(total_fraction - 1.0) < 0.001:
         logger.info(f"✓ Fractions sum to 1.0: {total_fraction}")
     else:

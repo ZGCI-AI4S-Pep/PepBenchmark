@@ -10,8 +10,8 @@ fi
 TASK="$1"
 # 定义要遍历的参数列表
 fold_seeds=(0 1 2 3 4)
-split_types=(random_split mmseqs2_split)
-model_names=(rf adaboost gradboost knn svm xgboost lightgbm)
+split_types=(random_split mmseqs2_split cdhit_split)
+model_names=(rf adaboost gradboost knn xgboost lightgbm)
 
 
 # 将项目名设为传入的 TASK，也可以改成固定字符串如 "test_af"

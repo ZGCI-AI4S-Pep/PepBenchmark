@@ -12,13 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .base_splitter import BaseSplitter, AbstractSplitter, SPLIT
-from .random_splitter import RandomSplitter
+from .base_splitter import SPLIT, AbstractSplitter, BaseSplitter
 from .mmseq_splitter import MMseqs2Splitter
+from .random_splitter import RandomSplitter
 
 __all__ = [
     "BaseSplitter",
-    "AbstractSplitter", 
+    "AbstractSplitter",
     "RandomSplitter",
     "MMseqs2Splitter",
     "SPLIT",

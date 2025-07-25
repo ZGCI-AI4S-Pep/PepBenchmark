@@ -18,7 +18,7 @@ from pepbenchmark.single_peptide.singeltask_dataset import SingleTaskDatasetMana
 from pepbenchmark.utils.seed import set_seed
 from pepbenchmark.evaluator import evaluate_classification
 from xgboost import XGBClassifier
-from pepbenchmark.metadata import DATASET_MAP
+from pepbenchmark.raw_data import DATASET_MAP
 import warnings
 warnings.filterwarnings("ignore")
 

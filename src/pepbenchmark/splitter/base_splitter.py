@@ -28,14 +28,15 @@ class SPLIT(Enum):
 
     RANDOM = "random"
     MMSEQS = "mmseqs"
+    CDHIT = "cdhit"
 
 
 class BaseSplitter(ABC):
     """
     Abstract base class for all data splitters.
-    
+
     This class defines the pure interface that all splitter implementations must follow.
-    
+
     Result Key Naming Conventions:
     - get_split_indices_n(): Returns keys as "seed_X" (X = 0 to n_splits-1)
     - get_split_kfold_indices(): Returns keys as "fold_X" (X = 0 to k_folds-1)
@@ -92,7 +93,7 @@ class BaseSplitter(ABC):
             k_folds: Number of folds for cross-validation
             seed: Random seed for reproducibility
             **kwargs: Additional splitter-specific parameters
-            
+
 
         Returns:
             Dictionary with keys in format "fold_X" where X is the fold index (0 to k_folds-1).
@@ -119,7 +120,7 @@ class BaseSplitter(ABC):
     ) -> Dict[str, Dict[str, Union[List[int], np.ndarray]]]:
         """
         Generate multiple random splits with different seeds.
-        
+
         This method provides a default implementation that can be overridden by subclasses.
         Repeat `get_split_indices()` with different seeds n_splits times by default.
 
@@ -160,7 +161,7 @@ class BaseSplitter(ABC):
         """Default implementation for multiple splits."""
         if not isinstance(data, (list, np.ndarray)):
             raise TypeError("Data must be a list or numpy array")
-        
+
         if n_splits <= 0:
             raise ValueError(f"n_splits must be positive, got {n_splits}")
 
@@ -182,7 +183,7 @@ class BaseSplitter(ABC):
 
         split_results = {}
         logger.info(f"Generating {n_splits} splits")
-        
+
         for i, current_seed in enumerate(seeds):
             logger.info(f"Generating split {i + 1}/{n_splits} with seed {current_seed}")
 
@@ -203,22 +204,19 @@ class BaseSplitter(ABC):
 class AbstractSplitter(BaseSplitter):
     """
     Abstract splitter class that provides common functionality for concrete splitters.
-    
+
     This class contains shared methods for validation, statistics, and I/O operations.
     All concrete splitters should inherit from this class instead of BaseSplitter directly.
-    
+
     Result Key Naming Conventions:
     - get_split_indices_n(): Returns keys as "seed_X" (X = 0 to n_splits-1)
     - get_split_kfold_indices(): Returns keys as "fold_X" (X = 0 to k_folds-1)
     - get_split_indices(): Returns single dict with "train", "valid", "test" keys
+
+    Initializes logging and internal state tracking.
     """
 
     def __init__(self):
-        """
-        Initialize the AbstractSplitter.
-        
-        Sets up logging and initializes internal state tracking.
-        """
         self.logger = get_logger(self.__class__.__name__)
         self._last_split_info = None
 
@@ -246,10 +244,10 @@ class AbstractSplitter(BaseSplitter):
     def validate_split_keys(self, split_results: Dict[str, Any]) -> None:
         """
         Validate that the split dictionary contains the required keys.
-        
+
         Args:
             split_results: Dictionary containing split results
-            
+
         Raises:
             ValueError: If required keys are missing
         """
@@ -264,11 +262,11 @@ class AbstractSplitter(BaseSplitter):
     ) -> None:
         """
         Validate that indices in splits are within the valid range.
-        
+
         Args:
             split_results: Dictionary containing split results with indices
             data_size: Size of the original dataset
-            
+
         Raises:
             TypeError: If indices are not of correct type
             ValueError: If indices are out of bounds
@@ -283,12 +281,10 @@ class AbstractSplitter(BaseSplitter):
                     f"Indices for {key} are out of bounds for data of size {data_size}"
                 )
 
-    def check_split_completeness(
-        self, all_indices: np.ndarray, data_size: int
-    ) -> None:
+    def check_split_completeness(self, all_indices: np.ndarray, data_size: int) -> None:
         """
         Check if the splits cover the entire dataset.
-        
+
         Args:
             all_indices: Array of all indices from all splits
             data_size: Expected size of the dataset
@@ -298,12 +294,10 @@ class AbstractSplitter(BaseSplitter):
                 f"Split is not complete. Expected {data_size} unique indices, but got {len(all_indices)}"
             )
 
-    def check_split_overlaps(
-        self, all_indices: np.ndarray, total_indices: int
-    ) -> None:
+    def check_split_overlaps(self, all_indices: np.ndarray, total_indices: int) -> None:
         """
         Check for overlapping indices between splits.
-        
+
         Args:
             all_indices: Array of unique indices from all splits
             total_indices: Total number of indices across all splits
@@ -400,7 +394,7 @@ class AbstractSplitter(BaseSplitter):
             split_results: Split results to save (can be single split or multiple splits)
             filepath: Output file path
             format: Output format ('json' or 'numpy')
-            
+
         Raises:
             ValueError: If format is not supported
             IOError: If file cannot be written
@@ -447,7 +441,7 @@ class AbstractSplitter(BaseSplitter):
 
         Returns:
             Dictionary containing split results (automatically converts lists to numpy arrays)
-            
+
         Raises:
             ValueError: If format is not supported
             FileNotFoundError: If file doesn't exist
