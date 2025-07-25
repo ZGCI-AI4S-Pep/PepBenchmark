@@ -13,7 +13,7 @@
 # limitations under the License.
 
 
-from pepbenchmark.metadata import DATASET_MAP
+from pepbenchmark.raw_data import DATASET_MAP
 
 AVALIABLE_DATASET = list(DATASET_MAP.keys())
 

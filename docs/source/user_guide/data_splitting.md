@@ -111,12 +111,7 @@ split_result = splitter.get_split_indices(
 )
 
 # K-fold with homology awareness
-kfold_splits = splitter.get_split_kfold_indices(
-    data=sequences,
-    k_folds=5,
-    identity=0.25,
-    seed=42
-)
+kfold_splits = splitter.get_split_kfold_indices(data=sequences, k_folds=5, identity=0.25, seed=42)
 ```
 
 ### MMseqs2 Parameters
@@ -239,11 +234,11 @@ from pepbenchmark.splitter.base_splitter import AbstractSplitter
 
 class MyCustomSplitter(AbstractSplitter):
     """Custom splitter implementation."""
-    
+
     def get_split_indices(self, data, **kwargs):
         # Your custom splitting logic here
         pass
-    
+
     def get_split_kfold_indices(self, data, **kwargs):
         # Your custom k-fold logic here
         pass

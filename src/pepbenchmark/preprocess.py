@@ -52,7 +52,6 @@ import numpy as np
 import pandas as pd
 import torch
 
-from pepbenchmark.metadata import DATASET_MAP
 from pepbenchmark.pep_utils.convert import (
     Fasta2Biln,
     Fasta2Embedding,
@@ -61,10 +60,12 @@ from pepbenchmark.pep_utils.convert import (
     Smiles2FP,
     Smiles2Graph,
 )
+from pepbenchmark.raw_data import DATASET_MAP
 from pepbenchmark.single_peptide.singeltask_dataset import (
     FEATURE_FILE_EXTENTION_MAP,
     OFFICIAL_FEATURE_TYPES,
 )
+from pepbenchmark.splitter.cdhit_splitter import CDHitSplitter
 from pepbenchmark.splitter.mmseq_splitter import MMseqs2Splitter
 from pepbenchmark.splitter.random_splitter import RandomSplitter
 from pepbenchmark.utils.logging import get_logger
@@ -106,7 +107,7 @@ class DatasetPreprocessor:
         self.metadata = DATASET_MAP[dataset_name]
 
         # Use base_data_dir if provided, otherwise use the path from metadata
-        if base_data_dir is not None:
+        if not base_data_dir:
             self.dataset_path = DATASET_MAP.get(dataset_name, {}).get("path", None)
         else:
             self.dataset_path = base_data_dir
@@ -214,7 +215,7 @@ class DatasetPreprocessor:
         elif feature_type == "label":
             return self._raw_data["label"].tolist()
 
-        elif feature_type in ["random_split", "mmseqs2_split"]:
+        elif feature_type in ["random_split", "mmseqs2_split", "cdhit_split"]:
             return self._generate_split(feature_type)
 
         else:
@@ -243,7 +244,7 @@ class DatasetPreprocessor:
         """Generate train/validation/test splits.
 
         Args:
-            split_type: Type of split ('random_split' or 'mmseqs2_split')
+            split_type: Type of split ('random_split', 'cdhit_split' or 'mmseqs2_split')
 
         Returns:
             Dictionary containing split indices for multiple seeds
@@ -273,12 +274,27 @@ class DatasetPreprocessor:
                 test_idx = split_result["test"]
 
             elif split_type == "mmseqs2_split":
-                splitter = MMseqs2Spliter()
+                splitter = MMseqs2Splitter()
                 split_result = splitter.get_split_indices(
                     data=sequences,
                     frac_train=0.8,
                     frac_valid=0.1,
                     frac_test=0.1,
+                    identity=0.4,
+                    seed=seed,
+                )
+                train_idx = split_result["train"]
+                valid_idx = split_result["valid"]
+                test_idx = split_result["test"]
+
+            elif split_type == "cdhit_split":
+                splitter = CDHitSplitter()
+                split_result = splitter.get_split_indices(
+                    data=sequences,
+                    frac_train=0.8,
+                    frac_valid=0.1,
+                    frac_test=0.1,
+                    identity=0.4,
                     seed=seed,
                 )
                 train_idx = split_result["train"]
@@ -481,18 +497,20 @@ if __name__ == "__main__":
     # Example usage
 
     # Example 1: Process a single dataset with all features
-    dataset_name = "AV_APML"
-    base_data_dir = DATASET_MAP.get(dataset_name, {}).get("path", None)
-    try:
-        preprocessor = preprocess_dataset(
-            dataset_name=dataset_name,
-            base_data_dir=base_data_dir,
-            force_regenerate=False,
-        )
-        print("Preprocessing completed successfully!")
-        print(f"Feature info: {preprocessor.get_feature_info()}")
-    except Exception as e:
-        logger.error(f"Preprocessing failed: {e}")
+    dataset_names = ["antifungal", "antiviral", "quorum_sensing", "neuropeptide"]
+    for dataset_name in dataset_names:
+        dataset_name = dataset_name.lower()
+        base_data_dir = DATASET_MAP.get(dataset_name, {}).get("path", None)
+        try:
+            preprocessor = preprocess_dataset(
+                dataset_name=dataset_name,
+                base_data_dir=base_data_dir,
+                force_regenerate=False,
+            )
+            print("Preprocessing completed successfully!")
+            print(f"Feature info: {preprocessor.get_feature_info()}")
+        except Exception as e:
+            logger.error(f"Preprocessing failed: {e}")
 
     # # Example 2: Manual step-by-step processing with custom base directory
     # try:

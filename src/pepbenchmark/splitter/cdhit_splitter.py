@@ -18,22 +18,19 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
-from pepbenchmark.pep_utils.mmseq2 import (
-    parse_cluster_tsv,
-    run_mmseqs_clustering,
-    save_fasta,
-)
+from pepbenchmark.pep_utils.cdhit import parse_cdhit_clstr, run_cdhit_clustering
+from pepbenchmark.pep_utils.mmseq2 import save_fasta
 from pepbenchmark.splitter.base_splitter import AbstractSplitter
 from pepbenchmark.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
 
-class MMseqs2Splitter(AbstractSplitter):
+class CDHitSplitter(AbstractSplitter):
     """
-    MMseqs2-based sequence splitter for homology-aware splitting.
+    CDHit-based sequence splitter for homology-aware splitting.
 
-    This splitter uses MMseqs2 clustering to ensure that similar sequences
+    This splitter uses CDHit clustering to ensure that similar sequences
     are placed in the same split, preventing data leakage in evaluation.
 
     Result Key Naming Conventions:
@@ -41,7 +38,7 @@ class MMseqs2Splitter(AbstractSplitter):
     - get_split_kfold_indices(): Returns keys as "fold_X" (X = 0 to k_folds-1)
     - get_split_indices(): Returns single dict with "train", "valid", "test" keys
 
-    Initializes the MMseqs2Splitter, including caching mechanism for clustering results to avoid
+    Initializes the CDHitSplitter, including caching mechanism for clustering results to avoid
     re-clustering when the same data and parameters are used.
     """
 
@@ -63,9 +60,9 @@ class MMseqs2Splitter(AbstractSplitter):
         **kwargs: Any,
     ) -> Dict[str, List[int]]:
         """
-        Generate homology-aware split indices using MMseqs2 clustering.
+        Generate homology-aware split indices using CDHit clustering.
 
-        This method performs sequence clustering using MMseqs2 to group similar sequences
+        This method performs sequence clustering using CDHit to group similar sequences
         together, then distributes clusters across train/valid/test sets to prevent
         data leakage due to sequence similarity.
 
@@ -76,7 +73,7 @@ class MMseqs2Splitter(AbstractSplitter):
             frac_test: Fraction of data for test set (default: 0.1)
             identity: Sequence identity threshold for clustering (default: 0.4)
             seed: Random seed for reproducibility (default: 42)
-            **kwargs: Additional MMseqs2 parameters (coverage, sensitivity, etc.)
+            **kwargs: Additional CDHit parameters (coverage, sensitivity, etc.)
 
         Returns:
             Dictionary containing train/valid/test split indices:
@@ -98,11 +95,11 @@ class MMseqs2Splitter(AbstractSplitter):
         # Use parent class validation methods
         self.validate_fractions(frac_train, frac_valid, frac_test)
 
-        # Extract MMseqs2 parameters
-        mmseqs_params = self._extract_mmseqs_params(kwargs)
+        # Extract CDHit parameters
+        cdhit_params = self._extract_cdhit_params(kwargs)
 
         # Get clustering results
-        cluster_map = self._get_or_create_clusters(data, identity, **mmseqs_params)
+        cluster_map = self._get_or_create_clusters(data, identity, **cdhit_params)
         cluster_items = list(cluster_map.items())
 
         split_result = self._generate_split_from_clusters(
@@ -126,7 +123,7 @@ class MMseqs2Splitter(AbstractSplitter):
         """
         Generate k-fold cross-validation splits based on sequence clustering.
 
-        This method performs MMseqs2 clustering first, then distributes clusters
+        This method performs CDHit clustering first, then distributes clusters
         across k folds to ensure similar sequences stay within the same fold.
         For each fold, the fold itself becomes the test set, and remaining data
         is split into train/valid sets.
@@ -136,7 +133,7 @@ class MMseqs2Splitter(AbstractSplitter):
             k_folds: Number of folds for cross-validation (default: 5)
             identity: Sequence identity threshold for clustering (default: 0.4)
             seed: Random seed for reproducibility (default: 42)
-            **kwargs: Additional MMseqs2 parameters (coverage, sensitivity, etc.)
+            **kwargs: Additional CDHit parameters (aln_coverage,tolerant, etc.)
 
         Returns:
             Dictionary with keys in format "fold_X" where X is the fold index (0 to k_folds-1).
@@ -158,11 +155,11 @@ class MMseqs2Splitter(AbstractSplitter):
         if k_folds <= 1:
             raise ValueError(f"k_folds must be greater than 1, got {k_folds}")
 
-        # Extract MMseqs2 parameters
-        mmseqs_params = self._extract_mmseqs_params(kwargs)
+        # Extract CDHit parameters
+        cdhit_params = self._extract_cdhit_params(kwargs)
 
         # Get clustering results
-        cluster_map = self._get_or_create_clusters(data, identity, **mmseqs_params)
+        cluster_map = self._get_or_create_clusters(data, identity, **cdhit_params)
         cluster_items = list(cluster_map.items())
 
         # Shuffle clusters using fixed seed
@@ -225,11 +222,11 @@ class MMseqs2Splitter(AbstractSplitter):
         # Process seed arguments
         seeds = self._prepare_seeds(seed, n_splits)
 
-        # Extract MMseqs2 parameters
-        mmseqs_params = self._extract_mmseqs_params(kwargs)
+        # Extract CDHit parameters
+        cdhit_params = self._extract_cdhit_params(kwargs)
 
         # Get clustering results (run only once)
-        cluster_map = self._get_or_create_clusters(data, identity, **mmseqs_params)
+        cluster_map = self._get_or_create_clusters(data, identity, **cdhit_params)
         cluster_items = list(cluster_map.items())
 
         split_results = {}
@@ -282,33 +279,24 @@ class MMseqs2Splitter(AbstractSplitter):
                 "If using a list, it should have the same length as n_splits."
             )
 
-    def _extract_mmseqs_params(self, kwargs: Dict[str, Any]) -> Dict[str, Any]:
+    def _extract_cdhit_params(self, kwargs: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Extract MMseqs2-specific parameters from kwargs.
+        Extract CDHit-specific parameters from kwargs.
 
         Args:
             kwargs: Dictionary of keyword arguments
 
         Returns:
-            Dictionary containing only MMseqs2-related parameters
+            Dictionary containing only CDHit-related parameters
         """
-        mmseqs_param_names = {
-            "coverage",
-            "sensitivity",
-            "alignment_mode",
-            "seq_id_mode",
-            "mask",
-            "cov_mode",
-            "threads",
-            "max_iterations",
-        }
+        cdhit_param_names = {"local_alignment", "aln_coverage", "tolerant"}
 
-        mmseqs_params = {}
+        cdhit_params = {}
         for key, value in kwargs.items():
-            if key in mmseqs_param_names or key.startswith("mmseqs_"):
-                mmseqs_params[key] = value
+            if key in cdhit_param_names or key.startswith("cdhit_"):
+                cdhit_params[key] = value
 
-        return mmseqs_params
+        return cdhit_params
 
     def _get_data_hash(self, data: List[str]) -> str:
         """
@@ -326,7 +314,7 @@ class MMseqs2Splitter(AbstractSplitter):
         return hashlib.md5(data_str.encode()).hexdigest()
 
     def _get_or_create_clusters(
-        self, data: List[str], identity: float, **mmseqs_params: Any
+        self, data: List[str], identity: float, **cdhit_params: Any
     ) -> Dict[str, List[str]]:
         """
         Get cached clusters or create new ones if parameters changed.
@@ -337,7 +325,7 @@ class MMseqs2Splitter(AbstractSplitter):
         Args:
             data: List of sequences to cluster
             identity: Sequence identity threshold
-            **mmseqs_params: Additional MMseqs2 parameters
+            **cdhit_params: Additional CDHit parameters
 
         Returns:
             Dictionary mapping cluster IDs to lists of sequence IDs
@@ -348,64 +336,60 @@ class MMseqs2Splitter(AbstractSplitter):
         if (
             self.cluster_map is not None
             and self._cached_identity == identity
-            and self._cached_params == mmseqs_params
+            and self._cached_params == cdhit_params
             and self._cached_data_hash == current_data_hash
         ):
             logger.info("Using cached clustering results")
             return self.cluster_map
 
         # Create new clustering
-        self.cluster_map = self._run_clustering(data, identity, **mmseqs_params)
+        self.cluster_map = self._run_clustering(data, identity, **cdhit_params)
         self._cached_identity = identity
-        self._cached_params = mmseqs_params.copy()
+        self._cached_params = cdhit_params.copy()
         self._cached_data_hash = current_data_hash
 
         return self.cluster_map
 
     def _run_clustering(
-        self, data: List[str], identity: float, **mmseqs_params: Any
+        self, data: List[str], identity: float, **cdhit_params: Any
     ) -> Dict[str, List[str]]:
         """
-        Run MMseqs2 clustering on the input sequences.
+        Run CDHit clustering on the input sequences.
 
         Args:
             data: List of sequences to cluster
             identity: Sequence identity threshold for clustering
-            **mmseqs_params: Additional MMseqs2 parameters
+            **cdhit_params: Additional CDHit parameters
 
         Returns:
             Dictionary mapping cluster IDs to lists of sequence IDs
 
         Raises:
-            Exception: If MMseqs2 clustering fails
+            Exception: If CDHit clustering fails
         """
         logger.info(
-            f"Starting MMseqs2 clustering: data_size={len(data)}, "
-            f"identity={identity}, params={mmseqs_params}"
+            f"Starting CDHit clustering: data_size={len(data)}, "
+            f"identity={identity}, params={cdhit_params}"
         )
 
         try:
             with tempfile.TemporaryDirectory() as tmp_root:
                 input_fasta = os.path.join(tmp_root, "input.fasta")
-                output_dir = os.path.join(tmp_root, "output")
-                tmp_dir = os.path.join(tmp_root, "tmp")
-
                 save_fasta(data, input_fasta)
                 logger.info(f"Input data saved to {input_fasta}")
-
-                tsv_path = run_mmseqs_clustering(
-                    input_fasta, output_dir, tmp_dir, identity, **mmseqs_params
+                clstr_path = run_cdhit_clustering(
+                    input_fasta, tmp_root, identity, **cdhit_params
                 )
-                cluster_map = parse_cluster_tsv(tsv_path)
+                cluster_map = parse_cdhit_clstr(clstr_path)
                 self._print_cluster_stats(cluster_map)
 
             logger.info(
-                f"MMseqs2 clustering completed: generated {len(cluster_map)} clusters "
+                f"CDHit clustering completed: generated {len(cluster_map)} clusters "
                 f"from {len(data)} sequences"
             )
             return cluster_map
         except Exception as e:
-            logger.error(f"MMseqs2 clustering failed: {e}")
+            logger.error(f"CDHit clustering failed: {e}")
             raise
 
     def _distribute_clusters_to_folds(
@@ -640,8 +624,8 @@ class MMseqs2Splitter(AbstractSplitter):
                 "median_cluster_size": 4.0,
                 "min_cluster_size": 1,
                 "max_cluster_size": 45,
-                "identity_threshold": 4,
-                "mmseqs_params": {"coverage": 0.8, "sensitivity": 7.5}
+                "identity_threshold": 0.4,
+                "cdhit_params": {"aln_coverage": 0.8, "tolerant": 2}
             }
         """
         if self.cluster_map is None:
@@ -656,25 +640,25 @@ class MMseqs2Splitter(AbstractSplitter):
             "min_cluster_size": min(cluster_sizes),
             "max_cluster_size": max(cluster_sizes),
             "identity_threshold": self._cached_identity,
-            "mmseqs_params": self._cached_params.copy() if self._cached_params else {},
+            "cdhit_params": self._cached_params.copy() if self._cached_params else {},
         }
 
 
 if __name__ == "__main__":
     from pepbenchmark.single_peptide.singeltask_dataset import SingleTaskDatasetManager
 
-    dataset_name = "AV_APML"  # Change this to your dataset name
+    dataset_name = "BBP"  # Change this to your dataset name
 
     dataset_manager = SingleTaskDatasetManager(
         dataset_name=dataset_name, official_feature_names=["fasta"]
     )
     fasta = dataset_manager.get_official_feature("fasta")
 
-    splitter = MMseqs2Splitter()
+    splitter = CDHitSplitter()
 
-    # Test with default MMseqs2 parameters
+    # Test with default CDHit parameters
     logger.info("=" * 50)
-    logger.info("Testing with default MMseqs2 parameters")
+    logger.info("Testing with default CDHit parameters")
     logger.info("=" * 50)
 
     # Generate 5 random splits with default parameters
@@ -684,25 +668,18 @@ if __name__ == "__main__":
         frac_train=0.8,
         frac_valid=0.1,
         frac_test=0.1,
-        identity=0.25,
+        identity=0.4,
         seed=42,
     )
 
-    # Test with custom MMseqs2 parameters
+    # Test with custom CDHit parameters
     logger.info("=" * 50)
-    logger.info("Testing with custom MMseqs2 parameters")
+    logger.info("Testing with custom CDHit parameters")
     logger.info("=" * 50)
 
     # Generate k-fold cross-validation splits with custom parameters
     kfold_splits = splitter.get_split_kfold_indices(
-        fasta,
-        k_folds=5,
-        identity=0.25,
-        seed=42,
-        coverage=0.8,
-        sensitivity=7.5,
-        threads=4,
-        cov_mode=1,
+        fasta, k_folds=5, identity=0.4, seed=42
     )
 
     # Test with single split and additional custom parameters
@@ -715,14 +692,11 @@ if __name__ == "__main__":
         frac_train=0.7,
         frac_valid=0.15,
         frac_test=0.15,
-        identity=0.3,
+        identity=0.4,
         seed=123,
-        # More custom MMseqs2 parameters
-        coverage=0.5,
-        sensitivity=6.0,
-        alignment_mode=2,
-        seq_id_mode=0,
-        mask=1,
+        # More custom CDHit parameters
+        aln_coverage=0.8,
+        tolerant=5,
     )
 
     # Print cluster information
@@ -842,4 +816,4 @@ if __name__ == "__main__":
         else:
             logger.warning(f"File not found for cleanup: {file_path}")
 
-    logger.info("All MMseqs2 tests completed successfully!")
+    logger.info("All CDHit tests completed successfully!")

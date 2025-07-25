@@ -53,7 +53,7 @@ Example:
 
 # Configure logging for this module``
 import os
-from typing import Any, Optional, Union, List
+from typing import Any, List, Optional, Union
 
 import numpy as np
 import torch
@@ -99,7 +99,9 @@ class FormatTransform:
     def __init__(self):
         self.desc = "Processing batch"
 
-    def __call__(self, inputs: Union[Any, List[Any]], **kwargs: Any) -> Union[Any, List[Any]]:
+    def __call__(
+        self, inputs: Union[Any, List[Any]], **kwargs: Any
+    ) -> Union[Any, List[Any]]:
         """Perform the format transformation on single input or batch.
 
         Args:
@@ -114,7 +116,7 @@ class FormatTransform:
         """
         return self._process_batch(inputs, **kwargs)
 
-    def _process_batch(self, inputs: List[Any], **kwargs: Any) ->  List[Any]:
+    def _process_batch(self, inputs: List[Any], **kwargs: Any) -> List[Any]:
         """Handle batch processing.
 
         Args:
@@ -245,8 +247,12 @@ class Fasta2Embedding(FormatTransform):
         >>> print(len(embeddings))  # 2
     """
 
-    def __init__(self, model: Union[str, PreTrainedModel], device: Optional[str] = None, pooling: str = "mean"):
-
+    def __init__(
+        self,
+        model: Union[str, PreTrainedModel],
+        device: Optional[str] = None,
+        pooling: str = "mean",
+    ):
         super().__init__()
         self.desc = "Generating embeddings"
 
@@ -968,8 +974,9 @@ class Smiles2Graph(FormatTransform):
         super().__init__()
         self.desc = "Converting SMILES to graph representation"
 
-    def _process_single(self, smiles: str, label: Optional[torch.Tensor] = None) -> Data:
-
+    def _process_single(
+        self, smiles: str, label: Optional[torch.Tensor] = None
+    ) -> Data:
         """Convert SMILES string to graph representation (PyTorch Geometric Data object).
 
         Args:
@@ -995,7 +1002,9 @@ class Smiles2Graph(FormatTransform):
 
         return graph
 
-    def __call__(self, inputs: Union[str, List[str]], label: Optional[torch.Tensor] = None) -> Union[Data, List[Data]]:
+    def __call__(
+        self, inputs: Union[str, List[str]], label: Optional[torch.Tensor] = None
+    ) -> Union[Data, List[Data]]:
         """Call method to handle both single and batch inputs.
 
         Args:

@@ -12,7 +12,7 @@
 
 #### 使用方法：
 ```bash
-python finetune_plm.py --task AV_APML --split_type random_split --model_name facebook/esm2_t30_150M_UR50D --fold_seed 0 --output_dir ./checkpoints --load_best_model_at_end
+python finetune_plm.py --task Antibacterial --split_type cdhit_split --model_name facebook/esm2_t30_150M_UR50D --fold_seed 0 --output_dir ./checkpoints --load_best_model_at_end
 ```
 
 #### 主要参数：
@@ -81,7 +81,7 @@ python finetune_plm_optuna.py --task AV_APML --split_type random_split --model_n
 ### 3. run_one_dataset.sh - 批量运行脚本
 一次性跑一个数据集的两种划分方式的5个种子：
 ```bash
-bash run_one_dataset.sh AV_APML
+bash run_one_dataset.sh Antibacterial
 ```
 
 ### 4. run_all.sh 
