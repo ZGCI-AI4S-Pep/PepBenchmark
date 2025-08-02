@@ -11,7 +11,7 @@ TASK="$1"
 
 # 定义要遍历的参数列表
 split_indices=(0 1 2 3 4)
-split_types=(random_split mmseqs2_split cdhit_split)
+split_types=(random_split mmseqs2_split)
 model_names=(facebook/esm2_t30_150M_UR50D)
 
 # 可选：设置公共超参
@@ -54,4 +54,4 @@ for st in "${split_types[@]}"; do
     done
   done
 done
-# nohup ./run_experiments.sh AF_APML > AF_APML.log 2>&1 &
+# nohup ./run_experiments.sh BPP_APML > BPP_APML.log 2>&1 &

@@ -1083,8 +1083,13 @@ if __name__ == "__main__":
     print("\n" + "=" * 80)
 
     # HELM Conversion Tests
-    helm = fasta2helm(fasta)
-    helm_list = fasta2helm(fasta_list)
+    helm = (
+        "PEPTIDE3102{A.[meL].[bHph].[dP].[dL].F}$PEPTIDE3102,PEPTIDE3102,1:R1-6:R2$$$"
+    )
+    helm_list = [
+        helm,
+        "PEPTIDE1597{A.[pentyl_Gly].L.[Nle].[dP].[Mono1]}$PEPTIDE1597,PEPTIDE1597,1:R1-6:R2$$$",
+    ]
     print("🧪 HELM Conversion Tests:")
     print("-" * 40)
 

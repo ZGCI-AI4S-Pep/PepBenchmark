@@ -52,6 +52,7 @@ import numpy as np
 import pandas as pd
 import torch
 
+from pepbenchmark.metadata import DATASET_MAP
 from pepbenchmark.pep_utils.convert import (
     Fasta2Biln,
     Fasta2Embedding,
@@ -60,7 +61,6 @@ from pepbenchmark.pep_utils.convert import (
     Smiles2FP,
     Smiles2Graph,
 )
-from pepbenchmark.raw_data import DATASET_MAP
 from pepbenchmark.single_peptide.singeltask_dataset import (
     FEATURE_FILE_EXTENTION_MAP,
     OFFICIAL_FEATURE_TYPES,
@@ -497,14 +497,34 @@ if __name__ == "__main__":
     # Example usage
 
     # Example 1: Process a single dataset with all features
-    dataset_names = ["antifungal", "antiviral", "quorum_sensing", "neuropeptide"]
+    dataset_names = [
+        "BBP_APML",
+        "cCPP_Pepland",
+        "Nonfouling",
+        "Solubility",
+        "AF_APML",
+        "AMP_PepDiffusion",
+        "AP_APML",
+        "AV_APML",
+        "cAB_APML2",
+        "ACE_APML",
+        "ACP_APML",
+        "Aox_APML",
+        "DLAD_BioDADPep",
+        "DPPIV_APML",
+        "Neuro_APML",
+        "QS_APML",
+        "TTCA_APML",
+        "Hemo_PeptideBERT",
+        "Tox_APML",
+    ]
     for dataset_name in dataset_names:
-        dataset_name = dataset_name.lower()
         base_data_dir = DATASET_MAP.get(dataset_name, {}).get("path", None)
         try:
             preprocessor = preprocess_dataset(
                 dataset_name=dataset_name,
                 base_data_dir=base_data_dir,
+                feature_types=["mmseqs2_split"],
                 force_regenerate=False,
             )
             print("Preprocessing completed successfully!")

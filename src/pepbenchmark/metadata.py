@@ -56,7 +56,9 @@ logger = logging.getLogger(__name__)
 
 # Base directory for processed peptide datasets
 # DEFAULT_DATA_DIR = os.path.expanduser("~/.pepbenchmark_cache/")
-DEFAULT_DATA_DIR = os.path.expanduser("~/assist/git_review/PepBenchmark/data_share/")
+DEFAULT_DATA_DIR = os.path.expanduser(
+    "/home/dataset-assist-0/rouyi/rouyi/Projects/PepBenchmark/data_share/peptide_dataset/original_dataset"
+)
 DATA_DIR = os.environ.get("PEPBENCHMARK_DATA_DIR", DEFAULT_DATA_DIR)
 
 """
@@ -349,8 +351,8 @@ DATASET_MAP = {
         "group": "Therapeutic-Other",
         "format": "FASTA",
     },
-    "TTCA_TCAHybrid": {
-        "path": os.path.join(DATA_DIR, "Theraputic-Other/TTCA_TCAHybrid"),
+    "TTCA_APML": {
+        "path": os.path.join(DATA_DIR, "Theraputic-Other/TTCA_APML"),
         "type": "binary_classification",
         "num_class": 2,
         "size": 955,

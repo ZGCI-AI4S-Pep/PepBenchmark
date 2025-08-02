@@ -18,12 +18,12 @@ from typing import List, Optional
 import pandas as pd
 import requests
 
-from pepbenchmark.raw_data import POS_DATA_DIR
-from pepbenchmark.utils.analyze import (
+from pepbenchmark.analyze.properties import (
     calculate_properties,
     compare_properties_distribution,
-    visualize_property_distribution_compare,
 )
+from pepbenchmark.analyze.visualization import visualize_property_distribution_compare
+from pepbenchmark.raw_data import DATA_DIR
 from pepbenchmark.utils.logging import get_logger
 
 logger = get_logger()
@@ -41,8 +41,7 @@ EXCLUSIVE_MAP = {
     "hemolytic": ["hemolytic", "cytotoxic", "anti mammalian cell"],
     "toxicity": ["toxic"],
     "neuropeptide": ["neuropeptide", "blood brain barrier penetrating", "neurological"],
-    "cpp": ["cell penetrating", "blood brain barrier penetrating"],
-    "antidiabetic": ["glucose", "glucosidase inhibitor"],
+    "antidiabetic": ["glucose"],
     "ace_inhibitory": ["coagulation + vascular", "angiotensinase inhibitor"],
     "bbp": [
         "blood brain barrier penetrating",
@@ -53,19 +52,11 @@ EXCLUSIVE_MAP = {
     "allergen": ["allergen"],
     "antiinflamatory": ["immunological"],
     "antiaging": ["anti aging"],
+    "dppiv_inhibitors": ["glucose"],
 }  # TODO: To be complete
 
 INCLUSIVE_MAP = {
-    "Nonfouling": ["Hemolytic", "Antimicrobial"],
-}  # TODO: To be complete
-
-EXPERIMENTAL_NEG_MAP = {
-    "Solubility": "",
-    "Antimicrobial": "",
-    "Antibacterial": "",
-    "Hemolytic": "",
-    "Toxicity": "",
-    "CPP": "",
+    "Nonfouling": ["Hemolytic", "cytotoxic", "anti mammalian cell"],
 }  # TODO: To be complete
 
 
@@ -81,32 +72,88 @@ class NegSampler(object):
         official_sampling_pool: Name of the official negative sampling pool.
     """
 
-    def __init__(self, dataset_name: str, official_sampling_pool: str = None) -> None:
+    def __init__(
+        self,
+        dataset_name: str,
+        user_sampling_pool_path: Optional[str] = None,
+        filt_length: Optional[int] = None,
+        dedup_identity: Optional[float] = None,
+        processes: Optional[int] = None,
+    ) -> None:
         self.dataset_name = dataset_name
+        self.filt_length = filt_length
+        self.dedup_identity = dedup_identity
+        self.processes = processes
+        self.official_sampling_pool = None
+        if user_sampling_pool_path:
+            self.set_user_sampling_pool(user_sampling_pool_path)
+        else:
+            self.set_official_sampling_pool()
+            self.user_sampling_pool = None
         self.sampling_pool = None
-        self.set_official_sampling_pool(official_sampling_pool)
         self.pos_sequences = None
         self.neg_sequences = None
+        if user_sampling_pool_path and (
+            dataset_name in EXCLUSIVE_MAP or dataset_name in INCLUSIVE_MAP
+        ):
+            self.merge_pool = True
+        else:
+            self.merge_pool = False
 
     def get_sample_result(
-        self, fasta: List[str], ratio: float, limit: str = None, seed: int = 42
+        self,
+        fasta: List[str],
+        ratio: float,
+        limit: Optional[str] = None,
+        seed: int = 42,
     ) -> List[str]:
+        if self.merge_pool:
+            # When merging, make sure both official and user pools are loaded
+            if self.official_sampling_pool is None:
+                self.set_official_sampling_pool()
+            pools = [
+                pool
+                for pool in [self.official_sampling_pool, self.user_sampling_pool]
+                if pool is not None
+            ]
+            sampling_pool = (
+                pd.concat(pools)
+                .drop_duplicates(subset="sequence")
+                .reset_index(drop=True)
+            )
+        elif self.user_sampling_pool is not None:
+            # Use only the user pool, do not load the official pool
+            sampling_pool = self.user_sampling_pool
+        else:
+            if self.official_sampling_pool is None:
+                logger.info(
+                    "No official sampling pool is set. Set official sampling pool from peptidepedia."
+                )
+                logger.info(
+                    "If you want to use your own sampling pool, please set user_sampling_pool_path when initializing NegSampler."
+                )
+                self.set_official_sampling_pool()
+            sampling_pool = self.official_sampling_pool
+
         if limit:
             pos_df = self._calculate_property_bins(fasta, limit, n_bins=10)
             neg_df = self._sample_by_property_bin(
-                pos_df, limit, ratio, random_seed=seed
+                pos_df, sampling_pool, limit, ratio, random_seed=seed
             )
             pos_sequences = pos_df["sequence"].tolist()
             neg_sequences = neg_df["sequence"].tolist()
         else:
             logger.info("No limit is set. Sampling negative samples by random.")
-            neg_sequences = self._sample_by_random(fasta, ratio, random_seed=seed)
+            neg_sequences = self._sample_by_random(
+                fasta, sampling_pool, ratio, random_seed=seed
+            )
+            pos_sequences = fasta
 
         self.pos_sequences = fasta
         self.neg_sequences = neg_sequences
 
         logger.info(
-            f"Get {len(neg_sequences)} negative samples from samping pool. ratio between negative and positive samples is {len(neg_sequences)/len(pos_sequences)} now. "
+            f"Get {len(neg_sequences)} negative samples from sampling pool. ratio between negative and positive samples is {len(neg_sequences)/len(pos_sequences)} now. "
         )
 
         return neg_sequences
@@ -122,10 +169,10 @@ class NegSampler(object):
             DataFrame summarizing distribution difference metrics.
         """
         if not self.pos_sequences or not self.neg_sequences:
-            logger.error(
+            raise ValueError(
                 "No sample result is available. Run get_sample_result() first."
             )
-            return None
+
         result = compare_properties_distribution(
             self.pos_sequences, self.neg_sequences, properties
         )
@@ -159,28 +206,39 @@ class NegSampler(object):
             properties=properties,
             plot_type=plot_type,
             bins=bins,
-            logger=logger,
         )
 
-    def set_user_sampling_pool(self, sampling_pool: list[str]) -> None:
-        self.sampling_pool = calculate_properties(sampling_pool)
+    def set_user_sampling_pool(self, user_sampling_pool_path: str) -> None:
+        pool = self._get_user_sampling_pool(user_sampling_pool_path)
+        if self.filt_length is not None or self.dedup_identity is not None:
+            pool = self._filter_sequences(
+                pool,
+                length_limit=self.filt_length,
+                identity=self.dedup_identity,
+                processes=self.processes,
+            )
+        self.user_sampling_pool = pool
+        logger.info(f"Set user sampling_pool: {user_sampling_pool_path} successfully")
 
-    def set_official_sampling_pool(self, official_sampling_pool: str) -> None:
-        if self.sampling_pool is not None:
-            logger.warning("Sampling pool has already been set, overwriting it.")
-        self.sampling_pool = self.get_official_negative_pool(official_sampling_pool)
-        logger.info(
-            f"Set official sampling_pool: {official_sampling_pool} successfully"
-        )
+    def set_official_sampling_pool(self) -> None:
+        pool = self.get_official_negative_pool("peptidepedia")
+        if self.filt_length is not None or self.dedup_identity is not None:
+            pool = self._filter_sequences(
+                pool,
+                length_limit=self.filt_length,
+                identity=self.dedup_identity,
+                processes=self.processes,
+            )
+        self.official_sampling_pool = pool
+        logger.info("Set official sampling_pool: peptidepedia successfully")
 
     def _download_negative_pool(self, sampling_pool: str) -> None:
-        assert sampling_pool in ["peptidepedia", "uniprot_inbioactive"]
         url = BASE_URL + f"{sampling_pool}.csv"
         negative_pool_path = os.path.join(
-            f"{POS_DATA_DIR}/negative_pool", f"{sampling_pool}.csv"
+            f"{DATA_DIR}/negative_pool", f"{sampling_pool}.csv"
         )
         print(negative_pool_path)
-        os.makedirs(f"{POS_DATA_DIR}/negative_pool", exist_ok=True)
+        os.makedirs(f"{DATA_DIR}/negative_pool", exist_ok=True)
         logger.info(f"Downloading ===neg pool=== from {url}")
         try:
             with requests.get(url, stream=True, timeout=100) as r:
@@ -193,7 +251,7 @@ class NegSampler(object):
             raise
 
     def _load_negative_pool(self, sampling_pool: str) -> pd.DataFrame:
-        neg_path = os.path.join(f"{POS_DATA_DIR}/negative_pool", f"{sampling_pool}.csv")
+        neg_path = os.path.join(f"{DATA_DIR}/negative_pool", f"{sampling_pool}.csv")
         if not os.path.exists(neg_path):
             self._download_negative_pool(sampling_pool)
         neg_df = pd.read_csv(neg_path)
@@ -209,6 +267,52 @@ class NegSampler(object):
         else:
             self.select = None
             self.mapping = []
+
+    def _get_user_sampling_pool(self, user_sampling_pool_path: str) -> pd.DataFrame:
+        df = pd.read_csv(user_sampling_pool_path)
+        if "sequence" not in df.columns:
+            raise ValueError("User sampling pool CSV must contain a 'sequence' column.")
+        pool = calculate_properties(df["sequence"].tolist())
+
+        return pool
+
+    def _filter_sequences(
+        self,
+        df: pd.DataFrame,
+        length_limit: Optional[int] = None,
+        identity: Optional[float] = None,
+        processes: Optional[int] = None,
+    ) -> pd.DataFrame:
+        """
+        Filter sequences longer than length_limit, and optionally perform deduplication.
+        Args:
+            df: DataFrame containing a 'sequence' column.
+            length_limit: Maximum allowed sequence length. Sequences longer than this will be filtered out. None means no length filtering.
+            identity: Identity threshold for deduplication. If None, no deduplication is performed.
+            processes: Number of processes to use for deduplication (if applicable).
+        Returns:
+            Filtered DataFrame.
+        """
+        if not isinstance(df, pd.DataFrame):
+            df = pd.DataFrame({"sequence": df})
+        if length_limit is not None:
+            mask = df["sequence"].astype(str).apply(lambda x: len(x) <= length_limit)
+            df = df[mask].copy()
+        if identity is not None:
+            from pepbenchmark.pep_utils.redundancy import Redundancy
+
+            rd = Redundancy()
+            seqs = df["sequence"].tolist()
+            deduped_seqs = rd.deduplicate(
+                seqs,
+                dedup_method="mmseqs",
+                identity=identity,
+                processes=processes if processes is not None else 16,
+                visualization=False,
+            )
+            mask = df["sequence"].astype(str).isin(deduped_seqs)
+            df = df[mask].copy()
+        return df
 
     def get_official_negative_pool(self, sampling_pool: str) -> pd.DataFrame:
         neg_df = self._load_negative_pool(sampling_pool)
@@ -228,32 +332,8 @@ class NegSampler(object):
         elif sampling_pool == "uniprot_inbioactive":
             neg_pool_df = neg_df
 
-        # 1. 过滤长度大于50的序列
-        if not isinstance(neg_pool_df, pd.DataFrame):
-            neg_pool_df = pd.DataFrame({"sequence": neg_pool_df})
-        neg_pool_df = neg_pool_df[
-            neg_pool_df["sequence"].astype(str).apply(lambda x: len(x) <= 50)
-        ]
-
-        # 2. 去冗余（mmseq2, identity=0.9）
-        from pepbenchmark.pep_utils.redundancy import Redundancy
-
-        rd = Redundancy()
-        seqs = neg_pool_df["sequence"].tolist()
-        deduped_seqs = rd.deduplicate(
-            seqs,
-            dedup_method="mmseqs",
-            identity=0.9,
-            threshold=0.9,
-            processes=16,
-            visualization=False,
-        )
-        if isinstance(neg_pool_df, pd.DataFrame):
-            neg_pool_df = neg_pool_df[
-                neg_pool_df["sequence"].astype(str).isin(deduped_seqs)
-            ]
-            neg_pool_df = neg_pool_df.copy() if not neg_pool_df.empty else neg_pool_df
-
+        # 只保留 sequence 列，确保类型
+        neg_pool_df = pd.DataFrame({"sequence": neg_pool_df["sequence"].tolist()})
         sampling_pool_df = calculate_properties(neg_pool_df["sequence"].tolist())
         return sampling_pool_df
 
@@ -287,13 +367,14 @@ class NegSampler(object):
     def _sample_by_property_bin(
         self,
         pos_df: pd.DataFrame,
+        sampling_pool: pd.DataFrame,
         limit: str,
         ratio: float,
         random_seed: int,
     ) -> pd.DataFrame:
         bin_counts = pos_df[f"{limit}_bin"].value_counts().sort_index()
 
-        sampling_pool_df = self.sampling_pool.copy()
+        sampling_pool_df = sampling_pool.copy()
         sampling_pool_df["used"] = False
 
         neg_samples = []
@@ -301,8 +382,13 @@ class NegSampler(object):
         pos_seq = pos_df["sequence"].tolist()
 
         for idx, bin_range in enumerate(bin_ranges):
-            low = bin_range.left
-            high = bin_range.right
+            # bin_range may be an interval or an int (if unique_count <= n_bins)
+            if hasattr(bin_range, "left") and hasattr(bin_range, "right"):
+                low = bin_range.left
+                high = bin_range.right
+            else:
+                low = bin_range
+                high = bin_range
             pos_count = bin_counts[bin_range]
 
             candidates = sampling_pool_df[
@@ -310,14 +396,17 @@ class NegSampler(object):
                 & (sampling_pool_df[f"{limit}"] > low)
                 & (sampling_pool_df[f"{limit}"] <= high)
             ]
-
-            candidates = candidates[~candidates["sequence"].isin(pos_seq)]
+            if "sequence" in candidates.columns:
+                candidates = candidates[~candidates["sequence"].isin(pos_seq)]
 
             neg_count = int(ratio * pos_count)
 
-            sampled = candidates.sample(
-                n=min(neg_count, len(candidates)), random_state=random_seed
-            )
+            if len(candidates) > 0:
+                sampled = candidates.sample(
+                    n=min(neg_count, len(candidates)), random_state=random_seed
+                )
+            else:
+                sampled = pd.DataFrame(columns=sampling_pool_df.columns)
             sampling_pool_df.loc[sampled.index, "used"] = True
 
             shortage = neg_count - len(sampled)
@@ -325,16 +414,21 @@ class NegSampler(object):
             # Borrow only from the next bin if available
             next_idx = idx + 1
             while shortage > 0 and next_idx < len(bin_ranges):
-                next_bin_range = bin_ranges[idx + 1]
-                next_low = next_bin_range.left
-                next_high = next_bin_range.right
+                next_bin_range = bin_ranges[next_idx]
+                if hasattr(next_bin_range, "left") and hasattr(next_bin_range, "right"):
+                    next_low = next_bin_range.left
+                    next_high = next_bin_range.right
+                else:
+                    next_low = next_bin_range
+                    next_high = next_bin_range
 
                 extra = sampling_pool_df[
                     (~sampling_pool_df["used"])
                     & (sampling_pool_df[f"{limit}"] > next_low)
                     & (sampling_pool_df[f"{limit}"] <= next_high)
                 ]
-                extra = extra[~extra["sequence"].isin(pos_seq)]
+                if "sequence" in extra.columns:
+                    extra = extra[~extra["sequence"].isin(pos_seq)]
                 borrow_count = min(shortage, len(extra))
                 if borrow_count > 0:
                     borrowed = extra.sample(
@@ -347,15 +441,26 @@ class NegSampler(object):
 
             neg_samples.append(sampled)
 
-        neg_df = pd.concat(neg_samples).drop_duplicates(subset="sequence")
+        if neg_samples:
+            neg_df = pd.concat(neg_samples).drop_duplicates(subset="sequence")
+        else:
+            neg_df = pd.DataFrame(columns=pd.Index(["sequence"]))
         return neg_df
 
     def _sample_by_random(
-        self, pos_sequences: List[str], ratio: float, random_seed: int
+        self,
+        pos_sequences: List[str],
+        sampling_pool: pd.DataFrame,
+        ratio: float,
+        random_seed: int,
     ) -> List[str]:
         neg_count = int(ratio * len(pos_sequences))
-        sampling_pool_df = self.sampling_pool.copy()
-        neg_df = sampling_pool_df.sample(n=neg_count, random_state=random_seed)
+        sampling_pool_df = sampling_pool.copy()
+        if len(sampling_pool_df) == 0:
+            return []
+        neg_df = sampling_pool_df.sample(
+            n=min(neg_count, len(sampling_pool_df)), random_state=random_seed
+        )
         return neg_df["sequence"].tolist()
 
 
@@ -369,9 +474,7 @@ if __name__ == "__main__":
     )
 
     positive_sequences = dataset_manager.get_positive_sequences()
-    sampler = NegSampler(
-        dataset_name=dataset_name, official_sampling_pool="peptidepedia"
-    )
+    sampler = NegSampler(dataset_name=dataset_name)
 
     #  sampling by property bin
     neg_seqs = sampler.get_sample_result(

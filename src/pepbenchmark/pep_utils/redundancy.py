@@ -15,8 +15,17 @@
 import os
 import random
 import tempfile
-from typing import List
+from typing import List, Optional
 
+from pepbenchmark.analyze.similarity import (
+    calculate_similarity_each_pair,
+    get_max_similarity_per_sample,
+    sliding_window_aar,
+)
+from pepbenchmark.analyze.visualization import (
+    plot_similarity_distribution,
+    plot_similarity_distribution_comparison,
+)
 from pepbenchmark.pep_utils.cdhit import (
     get_representative_seqs,
     run_cdhit_clustering,
@@ -25,13 +34,6 @@ from pepbenchmark.pep_utils.mmseq2 import (
     get_representative_ids_mmseq,
     run_mmseqs_clustering,
     save_fasta,
-)
-from pepbenchmark.utils.analyze import (
-    calculate_similarity_each_pair,
-    get_max_similarity_per_sample,
-    plot_similarity_distribution,
-    plot_similarity_distribution_comparison,
-    sliding_window_aar,
 )
 from pepbenchmark.utils.logging import get_logger
 
@@ -49,7 +51,7 @@ class Redundancy:
         self._cached_data_hash = None
 
     def _get_or_calculate_similarity(
-        self, sequences: List[str], threshold: float, processes: int = None
+        self, sequences: List[str], threshold: float, processes: Optional[int] = None
     ) -> List[float]:
         current_data_hash = self._get_data_hash(sequences)
         if (
