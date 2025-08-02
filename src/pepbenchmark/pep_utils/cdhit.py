@@ -60,7 +60,7 @@ def _build_cdhit_cluster_command(
         "1",
     ]
 
-    param_map = {"local_alignment": "-G", "aln_coverage": "-aL", "tolerant": "-t"}
+    param_map = {"local_alignment": "-G", "aln_coverage": "-A", "tolerant": "-t"}
 
     for key, flag in param_map.items():
         if key in params:

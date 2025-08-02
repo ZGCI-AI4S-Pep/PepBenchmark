@@ -129,7 +129,7 @@ def run_mmseqs_clustering(
         "alignment_mode": 3,
         "seq_id_mode": 1,
         "mask": 0,
-        "cov_mode": 2,
+        "cov_mode": 0,
     }
 
     # Update defaults with provided kwargs

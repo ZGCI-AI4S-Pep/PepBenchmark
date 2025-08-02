@@ -22,7 +22,7 @@ import requests
 import torch
 from torch.utils.data import Dataset
 
-from pepbenchmark.raw_data import DATASET_MAP
+from pepbenchmark.metadata import DATASET_MAP
 from pepbenchmark.single_peptide.base_dataset import DatasetManager
 from pepbenchmark.utils.logging import get_logger
 
@@ -46,7 +46,6 @@ OFFICIAL_FEATURE_TYPES = {
     "graph",
     "label",
 }
-
 
 FEATURE_FILE_EXTENTION_MAP = {
     "fasta": "csv",
@@ -139,6 +138,7 @@ class SingleTaskDatasetManager(DatasetManager):
             self.dataset_dir, f"{feature_name}.{file_extention}"
         )
         full_name = f"{self.dataset_name}/{feature_name}.{file_extention}"
+        print(feature_path)
 
         # Check if download is needed.
         need_download = False

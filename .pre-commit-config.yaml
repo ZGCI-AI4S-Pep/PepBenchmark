@@ -1,4 +1,4 @@
-exclude: '^(examples|src/pepbenchmark/external|src/pepbenchmark/reconstruct_pos\.py|model)/'
+exclude: '^(examples|src/pepbenchmark/external|src/pepbenchmark/reconstruct_pos.py|model|examples)/'
 default_language_version:
   python: python3
 

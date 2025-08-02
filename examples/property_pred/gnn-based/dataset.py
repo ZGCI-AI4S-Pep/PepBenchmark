@@ -63,7 +63,7 @@ class PeptideDataset(Dataset):
     def _process(self):
         if os.path.exists(self.gpath+'graphs.pt'):
             print(f'Loading graphs from {self.gpath}')
-            self.all_graphs = torch.load(self.gpath+'graphs.pt')
+            self.all_graphs = torch.load(self.gpath+'graphs.pt', weights_only=False)
         else:
             print(f'Processing graphs and saving to {self.gpath}')
             self.all_graphs = []

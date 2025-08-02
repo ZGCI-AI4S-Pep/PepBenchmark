@@ -326,7 +326,7 @@ if __name__ == "__main__":
     ]
 
     lib = MonomerLibrary.from_sdf_file(
-        "test_library", "PepDB-main/pep/resources/monomers.sdf"
+        "test_library", "/home/dataset-assist-0/rouyi/rouyi/Projects/PepBenchmark/src/pepbenchmark/external/pep/resources/monomers.sdf"
     )
     for helm in helm_list:
         parser = HelmParser(lib)
