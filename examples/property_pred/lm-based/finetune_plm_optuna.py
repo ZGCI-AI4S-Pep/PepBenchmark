@@ -24,7 +24,7 @@ from transformers import (
     TrainingArguments,
 )
 
-from pepbenchmark.raw_data import DATASET_MAP
+from pepbenchmark.metadata import DATASET_MAP
 from pepbenchmark.single_peptide.singeltask_dataset import SingleTaskDatasetManager
 from pepbenchmark.evaluator import evaluate_classification, evaluate_regression
 from pepbenchmark.utils.seed import set_seed
@@ -191,7 +191,7 @@ def create_objective(args, train_dataset, val_dataset, tokenizer, model_ckpt, ta
         
         # Create model
         model = AutoModelForSequenceClassification.from_pretrained(
-            model_ckpt, num_labels=num_labels
+            model_ckpt, num_labels=num_labels, local_files_only=True
         )
         
         # Build training arguments
@@ -254,7 +254,7 @@ def create_final_model(args, best_params, model_ckpt, task_type):
         raise ValueError(f"Unsupported task type: {task_type}")
     
     return AutoModelForSequenceClassification.from_pretrained(
-        model_ckpt, num_labels=num_labels
+        model_ckpt, num_labels=num_labels, local_files_only=True
     )
 
 
@@ -320,7 +320,7 @@ def main():
     task_type = dataset_metadata["type"]
 
     # Initialize tokenizer and datasets
-    tokenizer = AutoTokenizer.from_pretrained(args.model_name)
+    tokenizer = AutoTokenizer.from_pretrained(args.model_name, local_files_only=True)
     train_dataset = SequenceDatasetWithLabels(
         train_features["official_fasta"], 
         train_features["official_label"], 

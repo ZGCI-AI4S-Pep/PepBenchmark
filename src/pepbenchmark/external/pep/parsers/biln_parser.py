@@ -16,10 +16,9 @@ import re
 from dataclasses import dataclass, field
 from typing import Dict, Tuple
 
-from pep.base import Parser, Serializer
-from pep.entity import ConnectionInfo, ParsedData, ParsedMonomerInfo
-from pep.library import MonomerLibrary
-
+from pepbenchmark.external.pep.base import Parser, Serializer
+from pepbenchmark.external.pep.entity import ConnectionInfo, ParsedData, ParsedMonomerInfo
+from pepbenchmark.external.pep.library import MonomerLibrary
 
 # biln格式的解析和序列化
 class BilnSyntaxError(ValueError):
@@ -304,17 +303,17 @@ class BilnSerializer(Serializer):
 
 
 if __name__ == "__main__":
-    from pep.builder import MolBuilder
-    from pep.library import MonomerLibrary
+    from pepbenchmark.external.pep.builder import MolBuilder
+    from pepbenchmark.external.pep.library import MonomerLibrary
     from rdkit import Chem
 
     lib = MonomerLibrary.from_sdf_file(
-        "test_library", "PepDB-main/pep/resources/monomers.sdf"
+        "test_library", "/home/dataset-assist-0/rouyi/rouyi/Projects/PepBenchmark/src/pepbenchmark/external/pep/resources/monomers.sdf"
     )
 
     # biln = "A-G-K(1,3)-D-D.ac(1,2)"
     # biln = "D-T-H-F-P-I-C(1,3)-I-F-C(2,3)-C(3,3)-G-C(2,3)-C(4,3)-H-R-S-K-C(3,3)-G-M-C(4,3)-C(1,3)-K-T"
-    biln = "I-V-S-A-V-K-K-I-V-D-F-L-G-G-L-A-S-P"
+    biln = "M-D-X96-Q-V-S-S-P-I-X96-D-I-N-X96-X96-T-S-E-P-S-Q-K"
     # 用给定的单体库 lib 创建一个 BILN 解析器，然后用它解析 BILN 字符串 biln，最终得到结构化的解析结果 parsed_data
     parsed_data = BilnParser(lib).parse(biln)
     print(parsed_data)

@@ -539,6 +539,7 @@ class MMseqs2Splitter(AbstractSplitter):
         # Split remaining data into train and validation sets
         train_data_size = int(len(data) * frac_train)
         valid_data_size = int(len(data) * frac_valid)
+        np.random.shuffle(remaining_ids)
         train_ids = remaining_ids[:train_data_size]
         valid_ids = remaining_ids[train_data_size:]
 

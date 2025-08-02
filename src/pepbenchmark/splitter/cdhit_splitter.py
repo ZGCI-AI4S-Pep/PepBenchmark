@@ -523,6 +523,7 @@ class CDHitSplitter(AbstractSplitter):
         # Split remaining data into train and validation sets
         train_data_size = int(len(data) * frac_train)
         valid_data_size = int(len(data) * frac_valid)
+        np.random.shuffle(remaining_ids)
         train_ids = remaining_ids[:train_data_size]
         valid_ids = remaining_ids[train_data_size:]
 
@@ -647,7 +648,7 @@ class CDHitSplitter(AbstractSplitter):
 if __name__ == "__main__":
     from pepbenchmark.single_peptide.singeltask_dataset import SingleTaskDatasetManager
 
-    dataset_name = "BBP"  # Change this to your dataset name
+    dataset_name = "AV_APML"  # Change this to your dataset name
 
     dataset_manager = SingleTaskDatasetManager(
         dataset_name=dataset_name, official_feature_names=["fasta"]

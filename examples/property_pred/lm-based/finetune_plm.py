@@ -16,7 +16,8 @@ from transformers import (
 )
 from pepbenchmark.single_peptide.singeltask_dataset import SingleTaskDatasetManager
 from pepbenchmark.utils.seed import set_seed
-
+import os
+os.environ["WANDB_DISABLED"] = "true"
 
 warnings.filterwarnings(
     "ignore",
@@ -26,7 +27,7 @@ import numpy as np
 from scipy.special import softmax
 from transformers import EarlyStoppingCallback, Trainer, TrainingArguments
 
-from pepbenchmark.raw_data import DATASET_MAP
+from pepbenchmark.metadata import DATASET_MAP
 
 class SequenceDatasetWithLabels(Dataset):
     def __init__(self, sequences,labels, tokenizer, max_len=200):
@@ -106,7 +107,7 @@ def parse_args():
     parser.add_argument("--output_dir", type=str, default="./checkpoints", help="Output directory for model and results")
     parser.add_argument("--num_train_epochs", type=int, default=30, help="Number of training epochs")
     parser.add_argument("--learning_rate", type=float, default=5e-5, help="Learning rate")
-    parser.add_argument("--per_device_train_batch_size", type=int, default=64, help="Training batch size per device")
+    parser.add_argument("--per_device_train_batch_size", type=int, default=32, help="Training batch size per device")
     parser.add_argument("--warmup_steps", type=int, default=0, help="Number of warmup steps")
     parser.add_argument("--weight_decay", type=float, default=0.0, help="Weight decay")
     parser.add_argument("--eval_strategy", type=str, default="epoch", help="Evaluation strategy")
@@ -145,7 +146,7 @@ if __name__ == "__main__":
     dataset_metadata = dataset_manager.get_dataset_metadata()
     max_len = dataset_metadata.get("max_len", 200)
     task_type = dataset_metadata["type"]
-    tokenizer = AutoTokenizer.from_pretrained(args.model_name)
+    tokenizer = AutoTokenizer.from_pretrained(args.model_name, cache_dir="/home/dataset-assist-0/rouyi/rouyi/.hug_cache/hub", local_files_only=True)
 
     train_dataset = SequenceDatasetWithLabels(train_features["official_fasta"], train_features["official_label"], tokenizer, max_len=max_len)
     valid_dataset = SequenceDatasetWithLabels(valid_features["official_fasta"], valid_features["official_label"], tokenizer, max_len=max_len)
@@ -174,7 +175,7 @@ if __name__ == "__main__":
     if task_type == "binary_classification":
         num_labels = 2
         model = AutoModelForSequenceClassification.from_pretrained(
-            args.model_name, num_labels=num_labels
+            args.model_name, num_labels=num_labels, cache_dir="/home/dataset-assist-0/rouyi/rouyi/.hug_cache/hub", local_files_only=True
         )
         compute_metrics = binary_classification_compute_metrics
     # TODO: multi_class_classification
@@ -182,7 +183,7 @@ if __name__ == "__main__":
         raise NotImplementedError("Multi-class classification is not yet implemented")
     elif task_type == "regression":
         model = AutoModelForSequenceClassification.from_pretrained(
-            args.model_name, num_labels=1
+            args.model_name, num_labels=1, cache_dir="/home/dataset-assist-0/rouyi/rouyi/.hug_cache/hub", local_files_only=True
         )
         compute_metrics = regression_compute_metrics
 
