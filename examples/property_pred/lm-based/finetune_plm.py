@@ -27,7 +27,7 @@ import numpy as np
 from scipy.special import softmax
 from transformers import EarlyStoppingCallback, Trainer, TrainingArguments
 
-from pepbenchmark.metadata import DATASET_MAP
+from pepbenchmark.raw_data import DATASET_MAP
 
 class SequenceDatasetWithLabels(Dataset):
     def __init__(self, sequences,labels, tokenizer, max_len=200):
