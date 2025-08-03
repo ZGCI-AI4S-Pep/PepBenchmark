@@ -15,6 +15,7 @@
 import os
 import tempfile
 from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -25,6 +26,7 @@ from pepbenchmark.pep_utils.mmseq2 import (
 )
 from pepbenchmark.splitter.base_splitter import AbstractSplitter
 from pepbenchmark.utils.logging import get_logger
+from pepbenchmark.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -33,8 +35,10 @@ class MMseqs2Splitter(AbstractSplitter):
     """
     MMseqs2-based sequence splitter for homology-aware splitting.
 
+
     This splitter uses MMseqs2 clustering to ensure that similar sequences
     are placed in the same split, preventing data leakage in evaluation.
+
 
     Result Key Naming Conventions:
     - get_split_indices_n(): Returns keys as "seed_X" (X = 0 to n_splits-1)
@@ -43,7 +47,11 @@ class MMseqs2Splitter(AbstractSplitter):
 
     Initializes the MMseqs2Splitter, including caching mechanism for clustering results to avoid
     re-clustering when the same data and parameters are used.
+
+    Initializes the MMseqs2Splitter, including caching mechanism for clustering results to avoid
+    re-clustering when the same data and parameters are used.
     """
+
 
     def __init__(self):
         super().__init__()
@@ -59,15 +67,18 @@ class MMseqs2Splitter(AbstractSplitter):
         frac_valid: float = 0.1,
         frac_test: float = 0.1,
         identity: float = 0.4,
+        identity: float = 0.4,
         seed: Optional[int] = 42,
         **kwargs: Any,
     ) -> Dict[str, List[int]]:
         """
         Generate homology-aware split indices using MMseqs2 clustering.
 
+
         This method performs sequence clustering using MMseqs2 to group similar sequences
         together, then distributes clusters across train/valid/test sets to prevent
         data leakage due to sequence similarity.
+
 
         Args:
             data: List of sequences to split
@@ -75,8 +86,10 @@ class MMseqs2Splitter(AbstractSplitter):
             frac_valid: Fraction of data for validation set (default: 0.1)
             frac_test: Fraction of data for test set (default: 0.1)
             identity: Sequence identity threshold for clustering (default: 0.4)
+            identity: Sequence identity threshold for clustering (default: 0.4)
             seed: Random seed for reproducibility (default: 42)
             **kwargs: Additional MMseqs2 parameters (coverage, sensitivity, etc.)
+
 
         Returns:
             Dictionary containing train/valid/test split indices:
@@ -85,6 +98,7 @@ class MMseqs2Splitter(AbstractSplitter):
                 "valid": [indices for validation set],
                 "test": [indices for test set]
             }
+
 
         Raises:
             ValueError: If fractions don't sum to 1.0 or are invalid
@@ -98,8 +112,10 @@ class MMseqs2Splitter(AbstractSplitter):
         # Use parent class validation methods
         self.validate_fractions(frac_train, frac_valid, frac_test)
 
+
         # Extract MMseqs2 parameters
         mmseqs_params = self._extract_mmseqs_params(kwargs)
+
 
         # Get clustering results
         cluster_map = self._get_or_create_clusters(data, identity, **mmseqs_params)
@@ -120,23 +136,28 @@ class MMseqs2Splitter(AbstractSplitter):
         data: List[str],
         k_folds: int = 5,
         identity: float = 0.4,
+        identity: float = 0.4,
         seed: Optional[int] = 42,
         **kwargs: Any,
     ) -> Dict[str, Dict[str, List[int]]]:
         """
         Generate k-fold cross-validation splits based on sequence clustering.
 
+
         This method performs MMseqs2 clustering first, then distributes clusters
         across k folds to ensure similar sequences stay within the same fold.
         For each fold, the fold itself becomes the test set, and remaining data
         is split into train/valid sets.
 
+
         Args:
             data: List of sequences to split
             k_folds: Number of folds for cross-validation (default: 5)
             identity: Sequence identity threshold for clustering (default: 0.4)
+            identity: Sequence identity threshold for clustering (default: 0.4)
             seed: Random seed for reproducibility (default: 42)
             **kwargs: Additional MMseqs2 parameters (coverage, sensitivity, etc.)
+
 
         Returns:
             Dictionary with keys in format "fold_X" where X is the fold index (0 to k_folds-1).
@@ -147,6 +168,7 @@ class MMseqs2Splitter(AbstractSplitter):
                 ...
             }
 
+
         Raises:
             ValueError: If k_folds <= 1
         """
@@ -155,11 +177,14 @@ class MMseqs2Splitter(AbstractSplitter):
             f"k_folds={k_folds}, identity={identity}, seed={seed}"
         )
 
+
         if k_folds <= 1:
             raise ValueError(f"k_folds must be greater than 1, got {k_folds}")
 
+
         # Extract MMseqs2 parameters
         mmseqs_params = self._extract_mmseqs_params(kwargs)
+
 
         # Get clustering results
         cluster_map = self._get_or_create_clusters(data, identity, **mmseqs_params)
@@ -181,6 +206,9 @@ class MMseqs2Splitter(AbstractSplitter):
         logger.info(
             f"All {k_folds} homology-aware k-fold splits completed successfully"
         )
+        logger.info(
+            f"All {k_folds} homology-aware k-fold splits completed successfully"
+        )
         return kfold_results
 
     def get_split_indices_n(
@@ -190,6 +218,7 @@ class MMseqs2Splitter(AbstractSplitter):
         frac_train: float = 0.8,
         frac_valid: float = 0.1,
         frac_test: float = 0.1,
+        identity: float = 0.4,
         identity: float = 0.4,
         seed: Union[List[int], int] = 42,
         **kwargs: Any,
@@ -222,11 +251,13 @@ class MMseqs2Splitter(AbstractSplitter):
         # Use parent class validation methods
         self.validate_fractions(frac_train, frac_valid, frac_test)
 
+
         # Process seed arguments
         seeds = self._prepare_seeds(seed, n_splits)
 
         # Extract MMseqs2 parameters
         mmseqs_params = self._extract_mmseqs_params(kwargs)
+
 
         # Get clustering results (run only once)
         cluster_map = self._get_or_create_clusters(data, identity, **mmseqs_params)
@@ -236,13 +267,16 @@ class MMseqs2Splitter(AbstractSplitter):
         for i, current_seed in enumerate(seeds):
             logger.info(f"Generating split {i + 1}/{n_splits} with seed {current_seed}")
 
+
             split_indices = self._generate_split_from_clusters(
                 cluster_items, data, frac_train, frac_valid, frac_test, current_seed
             )
 
+
             # Use parent class validation methods
             if not self.validate_split_results(split_indices, len(data)):
                 logger.warning(f"Split {i + 1} validation failed")
+
 
             logger.info(
                 f"Split {i + 1} completed: Train={len(split_indices['train'])}, "
@@ -257,12 +291,15 @@ class MMseqs2Splitter(AbstractSplitter):
         """
         Prepare seeds for multiple splits.
 
+
         Args:
             seed: Either a single integer or list of integers for seeding
             n_splits: Number of splits to generate
 
+
         Returns:
             List of seeds for each split
+
 
         Raises:
             ValueError: If seed list length doesn't match n_splits or invalid type
@@ -286,8 +323,10 @@ class MMseqs2Splitter(AbstractSplitter):
         """
         Extract MMseqs2-specific parameters from kwargs.
 
+
         Args:
             kwargs: Dictionary of keyword arguments
+
 
         Returns:
             Dictionary containing only MMseqs2-related parameters
@@ -301,12 +340,22 @@ class MMseqs2Splitter(AbstractSplitter):
             "cov_mode",
             "threads",
             "max_iterations",
+            "coverage",
+            "sensitivity",
+            "alignment_mode",
+            "seq_id_mode",
+            "mask",
+            "cov_mode",
+            "threads",
+            "max_iterations",
         }
+
 
         mmseqs_params = {}
         for key, value in kwargs.items():
             if key in mmseqs_param_names or key.startswith("mmseqs_"):
                 mmseqs_params[key] = value
+
 
         return mmseqs_params
 
@@ -314,13 +363,16 @@ class MMseqs2Splitter(AbstractSplitter):
         """
         Generate a hash for the data to check if it has changed.
 
+
         Args:
             data: List of sequences
+
 
         Returns:
             MD5 hash of the concatenated data
         """
         import hashlib
+
 
         data_str = "".join(data)
         return hashlib.md5(data_str.encode()).hexdigest()
@@ -331,20 +383,30 @@ class MMseqs2Splitter(AbstractSplitter):
         """
         Get cached clusters or create new ones if parameters changed.
 
+
         This method implements caching to avoid re-clustering when the same
         data and parameters are used multiple times.
+
 
         Args:
             data: List of sequences to cluster
             identity: Sequence identity threshold
             **mmseqs_params: Additional MMseqs2 parameters
 
+
         Returns:
             Dictionary mapping cluster IDs to lists of sequence IDs
         """
         current_data_hash = self._get_data_hash(data)
 
+
         # Check if we can use cached clustering results
+        if (
+            self.cluster_map is not None
+            and self._cached_identity == identity
+            and self._cached_params == mmseqs_params
+            and self._cached_data_hash == current_data_hash
+        ):
         if (
             self.cluster_map is not None
             and self._cached_identity == identity
@@ -354,11 +416,13 @@ class MMseqs2Splitter(AbstractSplitter):
             logger.info("Using cached clustering results")
             return self.cluster_map
 
+
         # Create new clustering
         self.cluster_map = self._run_clustering(data, identity, **mmseqs_params)
         self._cached_identity = identity
         self._cached_params = mmseqs_params.copy()
         self._cached_data_hash = current_data_hash
+
 
         return self.cluster_map
 
@@ -368,13 +432,16 @@ class MMseqs2Splitter(AbstractSplitter):
         """
         Run MMseqs2 clustering on the input sequences.
 
+
         Args:
             data: List of sequences to cluster
             identity: Sequence identity threshold for clustering
             **mmseqs_params: Additional MMseqs2 parameters
 
+
         Returns:
             Dictionary mapping cluster IDs to lists of sequence IDs
+
 
         Raises:
             Exception: If MMseqs2 clustering fails
@@ -383,6 +450,7 @@ class MMseqs2Splitter(AbstractSplitter):
             f"Starting MMseqs2 clustering: data_size={len(data)}, "
             f"identity={identity}, params={mmseqs_params}"
         )
+
 
         try:
             with tempfile.TemporaryDirectory() as tmp_root:
@@ -414,12 +482,15 @@ class MMseqs2Splitter(AbstractSplitter):
         """
         Distribute clusters across k folds as evenly as possible.
 
+
         Uses a greedy algorithm to assign each cluster to the currently
         smallest fold to achieve balanced fold sizes.
+
 
         Args:
             cluster_items: List of (cluster_id, members) tuples
             k_folds: Number of folds to create
+
 
         Returns:
             List of folds, where each fold is a list of sequence IDs
@@ -442,14 +513,17 @@ class MMseqs2Splitter(AbstractSplitter):
         """
         Generate k-fold results from distributed folds.
 
+
         For each fold, the fold itself becomes the test set, and remaining
         folds are combined and split into train/valid sets (80/20 split).
+
 
         Args:
             folds: List of folds, each containing sequence IDs
             data: Original data for creating ID-to-index mapping
             k_folds: Number of folds
             seed: Random seed for train/valid splitting
+
 
         Returns:
             Dictionary with fold results in format "fold_X"
@@ -459,6 +533,7 @@ class MMseqs2Splitter(AbstractSplitter):
 
         for fold_idx in range(k_folds):
             test_ids = folds[fold_idx]
+
 
             # Collect data from other folds
             remaining_ids = []
@@ -472,6 +547,7 @@ class MMseqs2Splitter(AbstractSplitter):
                 rng.shuffle(remaining_ids)
             else:
                 np.random.shuffle(remaining_ids)
+
 
             train_size = int(len(remaining_ids) * 0.8)
             train_ids = remaining_ids[:train_size]
@@ -537,6 +613,21 @@ class MMseqs2Splitter(AbstractSplitter):
                 remaining_ids.extend(members)
 
         # Split remaining data into train and validation sets
+        # Sort clusters by size
+        cluster_items_sorted = sorted(cluster_items_copy, key=lambda x: len(x[1]))
+        test_ids = []
+        remaining_ids = []
+        count_test = 0
+        test_data_size = int(len(data) * frac_test)
+
+        for _, members in cluster_items_sorted:
+            if count_test + len(members) <= test_data_size:
+                test_ids.extend(members)
+                count_test += len(members)
+            else:
+                remaining_ids.extend(members)
+
+        # Split remaining data into train and validation sets
         train_data_size = int(len(data) * frac_train)
         valid_data_size = int(len(data) * frac_valid)
         np.random.shuffle(remaining_ids)
@@ -548,10 +639,12 @@ class MMseqs2Splitter(AbstractSplitter):
             f"Target train={train_data_size}, Actual train={len(train_ids)} | "
             f"Target valid={valid_data_size}, Actual valid={len(valid_ids)} | "
             f"Target test={test_data_size}, Actual test={len(test_ids)}"
+            f"Target test={test_data_size}, Actual test={len(test_ids)}"
         )
 
         # Create a mapping from sequence ID to index
         id_to_idx = {f"seq{i}": i for i in range(len(data))}
+
 
         return {
             "train": [id_to_idx[x] for x in train_ids if x in id_to_idx],
@@ -563,10 +656,12 @@ class MMseqs2Splitter(AbstractSplitter):
         """
         Print comprehensive cluster statistics.
 
+
         Args:
             cluster_map: Dictionary mapping cluster IDs to sequence ID lists
         """
         cluster_sizes = [len(members) for members in cluster_map.values()]
+
 
         # Statistical information
         total_sequences = sum(cluster_sizes)
@@ -606,15 +701,18 @@ class MMseqs2Splitter(AbstractSplitter):
             f"  Cluster size distribution:\n"
         )
 
+
         for label, count in bins.items():
             percentage = (count / len(cluster_map)) * 100
             log_message += f"    {label}: {count} clusters ({percentage:.1f}%)\n"
+
 
         logger.info(log_message)
 
     def clear_cache(self) -> None:
         """
         Clear cached clustering results.
+
 
         This forces the next clustering operation to run from scratch,
         useful when you want to ensure fresh results or free memory.
@@ -629,9 +727,11 @@ class MMseqs2Splitter(AbstractSplitter):
         """
         Get comprehensive information about the current clustering.
 
+
         Returns:
             Dictionary containing cluster statistics and parameters,
             or None if no clustering has been performed yet.
+
 
         Example:
             {
@@ -642,11 +742,13 @@ class MMseqs2Splitter(AbstractSplitter):
                 "min_cluster_size": 1,
                 "max_cluster_size": 45,
                 "identity_threshold": 4,
+                "identity_threshold": 4,
                 "mmseqs_params": {"coverage": 0.8, "sensitivity": 7.5}
             }
         """
         if self.cluster_map is None:
             return None
+
 
         cluster_sizes = [len(members) for members in self.cluster_map.values()]
         return {
@@ -657,6 +759,7 @@ class MMseqs2Splitter(AbstractSplitter):
             "min_cluster_size": min(cluster_sizes),
             "max_cluster_size": max(cluster_sizes),
             "identity_threshold": self._cached_identity,
+            "mmseqs_params": self._cached_params.copy() if self._cached_params else {},
             "mmseqs_params": self._cached_params.copy() if self._cached_params else {},
         }
 
@@ -738,20 +841,28 @@ if __name__ == "__main__":
 
     # Test saving and loading single split results
 
+
     # Save single split results in both JSON and numpy formats
     json_path = "single_split.json"
     numpy_path = "single_split.npz"
+
 
     # Save in JSON format
     splitter.save_split_results(single_split, json_path, format="json")
     logger.info(f"Single split saved to JSON: {json_path}")
 
+
     # Save in numpy format
     splitter.save_split_results(single_split, numpy_path, format="numpy")
     logger.info(f"Single split saved to numpy: {numpy_path}")
 
+
     # Load and verify JSON format
     loaded_json = splitter.load_split_results(json_path, format="json")
+    logger.info(
+        f"Loaded JSON split - Train: {len(loaded_json['train'])}, Valid: {len(loaded_json['valid'])}, Test: {len(loaded_json['test'])}"
+    )
+
     logger.info(
         f"Loaded JSON split - Train: {len(loaded_json['train'])}, Valid: {len(loaded_json['valid'])}, Test: {len(loaded_json['test'])}"
     )
@@ -765,8 +876,13 @@ if __name__ == "__main__":
         else:
             logger.error(f"✗ {split_name} split mismatch after JSON load")
 
+
     # Load and verify numpy format
     loaded_numpy = splitter.load_split_results(numpy_path, format="numpy")
+    logger.info(
+        f"Loaded numpy split - Train: {len(loaded_numpy['train'])}, Valid: {len(loaded_numpy['valid'])}, Test: {len(loaded_numpy['test'])}"
+    )
+
     logger.info(
         f"Loaded numpy split - Train: {len(loaded_numpy['train'])}, Valid: {len(loaded_numpy['valid'])}, Test: {len(loaded_numpy['test'])}"
     )
@@ -780,13 +896,16 @@ if __name__ == "__main__":
         else:
             logger.error(f"✗ {split_name} split mismatch after numpy load")
 
+
     # Test saving and loading multiple splits
     multi_splits_path = "random_splits.json"
     splitter.save_split_results(random_splits, multi_splits_path, format="json")
     logger.info(f"Multiple splits saved to: {multi_splits_path}")
 
+
     loaded_multi = splitter.load_split_results(multi_splits_path, format="json")
     logger.info(f"Loaded multiple splits with keys: {list(loaded_multi.keys())}")
+
 
     # Verify structure of loaded multiple splits
     for split_key in random_splits.keys():
@@ -798,24 +917,34 @@ if __name__ == "__main__":
                     logger.info(
                         f"✓ {split_key}.{split_name} count matches ({original_count})"
                     )
+                    logger.info(
+                        f"✓ {split_key}.{split_name} count matches ({original_count})"
+                    )
                 else:
+                    logger.error(
+                        f"✗ {split_key}.{split_name} count mismatch: {original_count} vs {loaded_count}"
+                    )
                     logger.error(
                         f"✗ {split_key}.{split_name} count mismatch: {original_count} vs {loaded_count}"
                     )
         else:
             logger.error(f"✗ Missing split key: {split_key}")
 
+
     # Test saving and loading k-fold splits
     kfold_splits_path = "kfold_splits.json"
     splitter.save_split_results(kfold_splits, kfold_splits_path, format="json")
     logger.info(f"K-fold splits saved to: {kfold_splits_path}")
 
+
     loaded_kfold = splitter.load_split_results(kfold_splits_path, format="json")
     logger.info(f"Loaded k-fold splits with keys: {list(loaded_kfold.keys())}")
+
 
     # Test get_split_statistics
     stats = splitter.get_split_statistics(single_split)
     logger.info(f"Split statistics: {stats}")
+
 
     # Verify statistics
     expected_total = len(fasta)
@@ -826,7 +955,14 @@ if __name__ == "__main__":
             f"✗ Total size mismatch: expected {expected_total}, got {stats['total_size']}"
         )
 
+        logger.error(
+            f"✗ Total size mismatch: expected {expected_total}, got {stats['total_size']}"
+        )
+
     # Check that fractions sum to approximately 1.0
+    total_fraction = (
+        stats["train_fraction"] + stats["valid_fraction"] + stats["test_fraction"]
+    )
     total_fraction = (
         stats["train_fraction"] + stats["valid_fraction"] + stats["test_fraction"]
     )
@@ -844,3 +980,4 @@ if __name__ == "__main__":
             logger.warning(f"File not found for cleanup: {file_path}")
 
     logger.info("All MMseqs2 tests completed successfully!")
+

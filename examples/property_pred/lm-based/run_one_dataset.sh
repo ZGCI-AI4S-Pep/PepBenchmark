@@ -11,7 +11,11 @@ TASK="$1"
 
 # 定义要遍历的参数列表
 split_indices=(0 1 2 3 4)
+<<<<<<< HEAD
 split_types=(random_split mmseqs2_split)
+=======
+split_types=(random_split mmseqs2_split cdhit_split)
+>>>>>>> origin/main
 model_names=(facebook/esm2_t30_150M_UR50D)
 
 # 可选：设置公共超参

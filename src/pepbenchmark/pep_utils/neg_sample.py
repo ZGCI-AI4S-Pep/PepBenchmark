@@ -14,6 +14,7 @@
 
 import os
 from typing import List, Optional
+from typing import List, Optional
 
 import pandas as pd
 import requests
@@ -65,6 +66,7 @@ BASE_URL = "https://raw.githubusercontent.com/ZGCI-AI4S-Pep/peptide_data/main/"
 
 class NegSampler(object):
     """
+    class for negative sampling strategies used in peptide dataset construction.
     class for negative sampling strategies used in peptide dataset construction.
 
     Args:
@@ -256,6 +258,9 @@ class NegSampler(object):
             self._download_negative_pool(sampling_pool)
         neg_df = pd.read_csv(neg_path)
         return neg_df
+            self._download_negative_pool(sampling_pool)
+        neg_df = pd.read_csv(neg_path)
+        return neg_df
 
     def _get_mapping(self, dataset_name: str) -> None:
         if dataset_name in EXCLUSIVE_MAP:
@@ -430,6 +435,14 @@ class NegSampler(object):
                 if "sequence" in extra.columns:
                     extra = extra[~extra["sequence"].isin(pos_seq)]
                 borrow_count = min(shortage, len(extra))
+                if borrow_count > 0:
+                    borrowed = extra.sample(
+                        n=borrow_count, random_state=random_seed + idx + 1
+                    )
+                    sampling_pool_df.loc[borrowed.index, "used"] = True
+                    sampled = pd.concat([sampled, borrowed])
+                    shortage -= borrow_count
+                next_idx += 1
                 if borrow_count > 0:
                     borrowed = extra.sample(
                         n=borrow_count, random_state=random_seed + idx + 1

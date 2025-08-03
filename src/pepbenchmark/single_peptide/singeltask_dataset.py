@@ -22,7 +22,7 @@ import requests
 import torch
 from torch.utils.data import Dataset
 
-from pepbenchmark.metadata import DATASET_MAP
+from pepbenchmark.raw_data import DATASET_MAP
 from pepbenchmark.single_peptide.base_dataset import DatasetManager
 from pepbenchmark.utils.logging import get_logger
 

@@ -24,7 +24,7 @@ from transformers import (
     TrainingArguments,
 )
 
-from pepbenchmark.metadata import DATASET_MAP
+from pepbenchmark.raw_data import DATASET_MAP
 from pepbenchmark.single_peptide.singeltask_dataset import SingleTaskDatasetManager
 from pepbenchmark.evaluator import evaluate_classification, evaluate_regression
 from pepbenchmark.utils.seed import set_seed
