@@ -52,12 +52,19 @@ Example:
 """
 
 # Configure logging for this module``
+from email.policy import default
 import os
-from typing import Any, List, Optional, Union
+import re
+from typing import Any, Dict, List, Optional, Type, Union
 
 import numpy as np
+import pandas as pd
 import torch
-from ogb.utils import smiles2graph
+
+
+from ogb.utils.mol import smiles2graph
+
+
 from rdkit import Chem
 from rdkit.Chem import MACCSkeys
 from rdkit.Chem.rdFingerprintGenerator import (
@@ -66,18 +73,35 @@ from rdkit.Chem.rdFingerprintGenerator import (
     GetTopologicalTorsionGenerator,
 )
 from rdkit.DataStructs import ConvertToNumpyArray
+
 from torch_geometric.data import Data
+
+
 from tqdm import tqdm
 from transformers import AutoModel, AutoTokenizer, PreTrainedModel, PreTrainedTokenizer
 
-from pepbenchmark.external.pep.builder import MolBuilder
-from pepbenchmark.external.pep.library import MonomerLibrary
-from pepbenchmark.external.pep.parsers.biln_parser import BilnParser, BilnSerializer
-from pepbenchmark.external.pep.parsers.fasta_parser import FastaParser, FastaSerializer
-from pepbenchmark.external.pep.parsers.helm_parser import HelmParser, HelmSerializer
+from pepbenchmark.parser.builder import MolBuilder
+from pepbenchmark.parser.library import MonomerLibrary
+from pepbenchmark.parser.biln_parser import BilnParser, BilnSerializer
+from pepbenchmark.parser.fasta_parser import FastaParser, FastaSerializer
+from pepbenchmark.parser.helm_parser import HelmParser, HelmSerializer
 from pepbenchmark.utils.logging import get_logger
 
 logger = get_logger()
+
+
+def _require_graph_dependencies() -> None:
+    """Ensure optional graph-conversion dependencies are available."""
+    missing = []
+    if smiles2graph is None:
+        missing.append("ogb")
+    if Data is None:
+        missing.append("torch-geometric")
+    if missing:
+        raise ImportError(
+            "Graph conversion requires optional dependencies: "
+            + ", ".join(missing)
+        )
 
 
 class FormatTransform:
@@ -95,10 +119,13 @@ class FormatTransform:
         _process_single: Process a single input item
         _process_batch: Handle batch processing
     """
-
+    _registry: Dict[str, Type["FormatTransform"]] = {}
     def __init__(self):
         self.desc = "Processing batch"
-
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        if cls is not FormatTransform:
+            FormatTransform._registry[cls.__name__] = cls
     def __call__(
         self, inputs: Union[Any, List[Any]], **kwargs: Any
     ) -> Union[Any, List[Any]]:
@@ -148,6 +175,9 @@ class FormatTransform:
         """
         raise NotImplementedError("Subclasses must implement _process_single method.")
 
+    @classmethod
+    def supported_transforms(cls) -> List[str]:
+        return sorted(cls._registry.keys())
 
 class Fasta2Smiles(FormatTransform):
     """Transform a sequence in FASTA format into a SMILES string.
@@ -252,17 +282,17 @@ class Fasta2Embedding(FormatTransform):
         model: Union[str, PreTrainedModel],
         device: Optional[str] = None,
         pooling: str = "mean",
+        max_length: Optional[int] = 1024,
     ):
         super().__init__()
         self.desc = "Generating embeddings"
-
-        # Device setup
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         self.pooling = pooling.lower()
+        self.max_length = max_length
+
         if self.pooling not in {"mean", "max", "cls"}:
             raise ValueError(f"Unsupported pooling strategy: {self.pooling}")
 
-        # Load model and tokenizer
         if isinstance(model, str):
             self.tokenizer: PreTrainedTokenizer = AutoTokenizer.from_pretrained(
                 model, use_fast=False
@@ -273,36 +303,68 @@ class Fasta2Embedding(FormatTransform):
                 "`model` must be a HuggingFace model identifier string or a torch.nn.Module instance."
             )
 
-        # Prepare model
         self.model.to(self.device)
         self.model.eval()
 
-    def _process_single(self, fasta: str) -> np.ndarray:
-        """Generate embedding vector from a single FASTA sequence."""
-        # Parse FASTA
-        lines = fasta.strip().splitlines()
-        seq = "".join(line.strip() for line in lines if not line.startswith(">"))
-        if not seq:
-            raise ValueError("No sequence found in FASTA input.")
+    def __call__(
+        self, inputs: Union[str, List[str]], batch_size: int = 8
+    ) -> np.ndarray:
+        if isinstance(inputs, (list, tuple)):
+            return self._process_batch(list(inputs), batch_size=batch_size)
+        return self._process_single(inputs)
 
-        # Tokenize and infer
-        inputs = self.tokenizer(seq, return_tensors="pt", truncation=True)
+    def _process_single(self, fasta: str) -> np.ndarray:
+        inputs = self.tokenizer(
+            fasta,
+            return_tensors="pt",
+            truncation=self.max_length is not None,
+            max_length=self.max_length,
+            padding=False,
+        )
         inputs = {k: v.to(self.device) for k, v in inputs.items()}
+
         with torch.no_grad():
             out = self.model(**inputs)
 
-        hidden = out.last_hidden_state  # (1, L, D)
-        # Pooling
+        pooled = self._pool(out.last_hidden_state, inputs["attention_mask"])  # (1, D)
+        return pooled.squeeze(0).cpu().numpy()  # (D,)
+
+    def _process_batch(self, fastas: List[str], batch_size: int = 8) -> np.ndarray:
+        all_embs = []
+
+        for i in tqdm(range(0, len(fastas), batch_size), desc="Processing batches"):
+            batch_seqs = fastas[i : i + batch_size]
+
+            inputs = self.tokenizer(
+                batch_seqs,
+                return_tensors="pt",
+                truncation=self.max_length is not None,
+                max_length=self.max_length,
+                padding=True,
+            )
+            inputs = {k: v.to(self.device) for k, v in inputs.items()}
+
+            with torch.no_grad():
+                out = self.model(**inputs)
+
+            pooled = self._pool(out.last_hidden_state, inputs["attention_mask"])  # (B, D)
+            all_embs.append(pooled.cpu().numpy())
+
+        return np.vstack(all_embs)  # (N, D)
+    def _pool(self, hidden: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
+        mask = attention_mask.unsqueeze(-1).to(hidden.dtype)  # (B, L, 1)
+
         if self.pooling == "mean":
-            emb = hidden.mean(dim=1).squeeze(0)
+            summed = (hidden * mask).sum(dim=1)
+            counts = mask.sum(dim=1).clamp(min=1e-9)
+            return summed / counts
+
         elif self.pooling == "max":
-            emb = hidden.max(dim=1).squeeze(0)
-        else:  # 'cls'
-            emb = hidden[:, 0, :].squeeze(0)
+            hidden_masked = hidden.masked_fill(mask == 0, float("-inf"))
+            return hidden_masked.max(dim=1).values
 
-        return emb.cpu().numpy()
-
-
+        else:  # cls
+            return hidden[:, 0, :]
 class Fasta2Helm(FormatTransform):
     """Convert FASTA sequence to HELM (Hierarchical Editing Language for Macromolecules) notation.
 
@@ -320,20 +382,23 @@ class Fasta2Helm(FormatTransform):
         >>> print(helm_list)  # List of HELM notation strings
     """
 
-    def __init__(self):
+    def __init__(self, custom_sdf_path: Optional[str] = None):
         super().__init__()
         self.desc = "Converting FASTA to HELM"
+        self.custom_sdf_path = custom_sdf_path
+
+        default_sdf_path = os.path.join(
+            (os.path.dirname(__file__)),
+            "..",
+            "parser",
+            "monomers_merged.sdf",
+        )
+        sdf_path = custom_sdf_path if custom_sdf_path else default_sdf_path
+        name = "default_library" if not custom_sdf_path else "custom_library"
 
         self.lib = MonomerLibrary.from_sdf_file(
-            "test_library",
-            os.path.join(
-                (os.path.dirname(__file__)),
-                "..",
-                "external",
-                "pep",
-                "resources",
-                "monomers.sdf",
-            ),
+            name,
+            sdf_path,
         )
         self.fasta_parser = FastaParser(self.lib)
         self.helm_serializer = HelmSerializer(self.lib)
@@ -380,20 +445,23 @@ class Fasta2Biln(FormatTransform):
         >>> print(biln_list)  # List of BiLN notation strings
     """
 
-    def __init__(self):
+    def __init__(self, custom_sdf_path: Optional[str] = None):
         super().__init__()
         self.desc = "Converting FASTA to BiLN"
+        self.custom_sdf_path = custom_sdf_path
+
+        default_sdf_path = os.path.join(
+            (os.path.dirname(__file__)),
+            "..",
+            "parser",
+            "monomers_merged.sdf",
+        )
+        sdf_path = custom_sdf_path if custom_sdf_path else default_sdf_path
+        name = "default_library" if not custom_sdf_path else "custom_library"
 
         self.lib = MonomerLibrary.from_sdf_file(
-            "test_library",
-            os.path.join(
-                (os.path.dirname(__file__)),
-                "..",
-                "external",
-                "pep",
-                "resources",
-                "monomers.sdf",
-            ),
+            name,
+            sdf_path,
         )
         # Initialize the FastaParser and BilnSerializer with the monomer library
         self.fasta_parser = FastaParser(self.lib)
@@ -640,34 +708,150 @@ class Helm2Fasta(FormatTransform):
 
     This converter parses HELM (Hierarchical Editing Language for Macromolecules)
     notation and converts it back to standard FASTA amino acid sequence format.
+    
+    Supports two modes:
+    1. Standard conversion using built-in monomer library
+    2. Enhanced conversion using custom SDF file with monomer mappings
+
+    Args:
+        custom_sdf_path (str, optional): Path to custom SDF file containing
+            monomer mappings. If provided, will use mapping-based conversion.
 
     Example:
+        >>> # Standard conversion
         >>> converter = Helm2Fasta()
         >>> fasta = converter("PEPTIDE1{A.L.A.G.G.G.P.C.R}$$$$")
         >>> print(fasta)  # "ALAGGGPCR"
+
+        >>> # Custom SDF mapping conversion
+        >>> converter = Helm2Fasta(custom_sdf_path="monomers_merged.sdf")
+        >>> fasta = converter("PEPTIDE1{A.[meL].[bHph]}$$$$")
+        >>> print(fasta)  # Uses custom mappings
 
         >>> # Batch processing
         >>> fasta_list = converter(["PEPTIDE1{A.L.A.G.G.G.P.C.R}$$$$", "HELM2"])
         >>> print(fasta_list)  # List of FASTA sequences
     """
 
-    def __init__(self):
+    def __init__(self, custom_sdf_path: Optional[str] = None):
         super().__init__()
         self.desc = "Converting HELM to FASTA"
-
-        self.lib = MonomerLibrary.from_sdf_file(
-            "test_library",
-            os.path.join(
-                (os.path.dirname(__file__)),
-                "..",
-                "external",
-                "pep",
-                "resources",
-                "monomers.sdf",
-            ),
+        self.custom_sdf_path = custom_sdf_path
+        
+        default_sdf_path = os.path.join(
+            (os.path.dirname(__file__)),
+            "..",
+            "parser",
+            "monomers_merged.sdf",
         )
+        sdf_path = custom_sdf_path if custom_sdf_path else default_sdf_path
+        name = "default_library" if not custom_sdf_path else "custom_library"
+            
+        # Load standard monomer library
+        self.lib = MonomerLibrary.from_sdf_file(name, sdf_path)
+        self.monomer_map = self._load_monomer_mapping(sdf_path)  # Load mapping from standard SDF
+        logger.info(f"Loaded {len(self.monomer_map)} monomer mappings from {sdf_path}")
+
         self.helm_parser = HelmParser(self.lib)
         self.fasta_serializer = FastaSerializer(self.lib)
+
+    def _load_monomer_mapping(self, sdf_file_path: str) -> dict:
+        """Load monomer to natural amino acid mapping from SDF file.
+        
+        Args:
+            sdf_file_path (str): Path to SDF file containing monomer information.
+            
+        Returns:
+            dict: Mapping from monomer abbreviation to natural amino acid.
+        """
+        monomer_map = {}
+        
+        try:
+            with open(sdf_file_path, 'r', encoding='utf-8') as file:
+                content = file.read()
+            
+            # Split by $$$$ to separate each molecule record
+            molecules = content.split('$$$$\n')
+            
+            for molecule in molecules:
+                if molecule.strip():
+                    # Find m_abbr and natAnalog fields
+                    lines = molecule.split('\n')
+                    m_abbr = None
+                    nat_analog = None
+                    
+                    for line in lines:
+                        if line.startswith('>  <m_abbr>'):
+                            # Next line contains m_abbr value
+                            idx = lines.index(line)
+                            if idx + 1 < len(lines):
+                                m_abbr = lines[idx + 1].strip()
+                        elif line.startswith('>  <natAnalog>'):
+                            # Next line contains natAnalog value
+                            idx = lines.index(line)
+                            if idx + 1 < len(lines):
+                                nat_analog = lines[idx + 1].strip()
+                    
+                    # Add to mapping if both fields found
+                    if m_abbr and nat_analog:
+                        monomer_map[m_abbr] = nat_analog
+            
+            logger.info(f"Successfully loaded {len(monomer_map)} monomer mappings from SDF file")
+            
+        except Exception as e:
+            logger.error(f"Error reading SDF file: {e}")
+            return {}
+        
+        return monomer_map
+
+    def _extract_helm_sequence(self, helm_string: str) -> str:
+        """Extract sequence from HELM string inside {} brackets, ignoring cyclization info.
+        
+        Args:
+            helm_string (str): Full HELM notation string.
+            
+        Returns:
+            str: Sequence part inside {} brackets.
+        """
+        # Find sequence inside {} brackets
+        match = re.search(r'\{([^}]+)\}', helm_string)
+        if match:
+            return match.group(1)
+        return ""
+
+    def _convert_helm_to_fasta_with_mapping(self, helm_sequence: str) -> str:
+        """Convert HELM sequence to FASTA using custom monomer mapping.
+        
+        Args:
+            helm_sequence (str): HELM sequence (content inside {} brackets).
+            
+        Returns:
+            str: FASTA sequence string.
+        """
+        # Split sequence by dots to get individual monomers
+        monomers = helm_sequence.split('.')
+        fasta_sequence = ""
+        
+        for monomer in monomers:
+            monomer = monomer.strip()
+            
+            # Handle non-natural monomers (surrounded by brackets)
+            if monomer.startswith('[') and monomer.endswith(']'):
+                # Extract monomer abbreviation
+                monomer_abbr = monomer[1:-1]
+            else:
+                # Natural monomers also go through mapping
+                monomer_abbr = monomer
+            
+            # Find corresponding natural amino acid through mapping
+            if monomer_abbr in self.monomer_map:
+                fasta_sequence += self.monomer_map[monomer_abbr]
+            else:
+                # Use 'X' as placeholder if not found in mapping
+                logger.warning(f"Monomer {monomer_abbr} not found in mapping, using 'X'")
+                fasta_sequence += 'X'
+        
+        return fasta_sequence
 
     def _process_single(self, helm: str) -> str:
         """Convert HELM notation to FASTA sequence.
@@ -681,10 +865,90 @@ class Helm2Fasta(FormatTransform):
         Raises:
             ValueError: If HELM string cannot be parsed or converted.
         """
-        # Parse HELM notation into a structured format
-        parsed_data = self.helm_parser.parse(helm)
-        # Serialize back to FASTA format
-        return self.fasta_serializer.serialize(parsed_data)
+        # Use custom mapping if available
+        if self.monomer_map is not None:
+            # Extract HELM sequence
+            helm_seq = self._extract_helm_sequence(helm)
+            
+            if helm_seq:
+                # Convert using custom mapping
+                return self._convert_helm_to_fasta_with_mapping(helm_seq)
+            else:
+                return ""
+        else:
+            # Use standard conversion
+            try:
+                # Parse HELM notation into a structured format
+                parsed_data = self.helm_parser.parse(helm)
+                # Serialize back to FASTA format
+                return self.fasta_serializer.serialize(parsed_data)
+            except Exception as e:
+                logger.error(f"Failed to convert HELM to FASTA: {e}")
+                return ""
+
+    def batch_convert_from_csv(self, helm_csv_path: str, output_csv_path: str, 
+                              helm_column: str = 'HELM') -> pd.DataFrame:
+        """Convert HELM sequences from CSV file and save results.
+        
+        Args:
+            helm_csv_path (str): Path to input CSV file containing HELM sequences.
+            output_csv_path (str): Path to output CSV file for results.
+            helm_column (str): Name of the column containing HELM sequences.
+            
+        Returns:
+            pd.DataFrame: DataFrame with HELM and FASTA columns.
+            
+        Raises:
+            FileNotFoundError: If input CSV file doesn't exist.
+        """
+        if not os.path.exists(helm_csv_path):
+            raise FileNotFoundError(f"Input file {helm_csv_path} not found!")
+        
+        logger.info(f"Reading HELM sequences from {helm_csv_path}...")
+        helm_df = pd.read_csv(helm_csv_path)
+        
+        if helm_column not in helm_df.columns:
+            raise ValueError(f"Column '{helm_column}' not found in CSV file")
+        
+        # Initialize output lists
+        helm_sequences = []
+        fasta_sequences = []
+        
+        logger.info("Converting HELM sequences to FASTA...")
+        total_sequences = len(helm_df)
+        
+        for idx, row in helm_df.iterrows():
+            if idx % 1000 == 0:
+                logger.info(f"Processing sequence {idx+1}/{total_sequences}")
+            
+            helm_string = row[helm_column]
+            
+            # Convert to FASTA
+            fasta_seq = self._process_single(helm_string)
+            
+            helm_sequences.append(helm_string)
+            fasta_sequences.append(fasta_seq)
+        
+        # Create output DataFrame
+        output_df = pd.DataFrame({
+            'HELM': helm_sequences,
+            'FASTA': fasta_sequences
+        })
+        
+        logger.info(f"Saving results to {output_csv_path}...")
+        output_df.to_csv(output_csv_path, index=False)
+        
+        logger.info(f"Conversion completed! Processed {len(output_df)} sequences")
+        
+        # Show some examples
+        logger.info("Conversion examples:")
+        for i in range(min(5, len(output_df))):
+            helm_short = output_df.iloc[i]['HELM'][:100] + "..." if len(output_df.iloc[i]['HELM']) > 100 else output_df.iloc[i]['HELM']
+            logger.info(f"HELM: {helm_short}")
+            logger.info(f"FASTA: {output_df.iloc[i]['FASTA']}")
+            logger.info("-" * 50)
+        
+        return output_df
 
 
 class Helm2Smiles(FormatTransform):
@@ -703,20 +967,23 @@ class Helm2Smiles(FormatTransform):
         >>> print(smiles_list)  # List of SMILES strings
     """
 
-    def __init__(self):
+    def __init__(self, custom_sdf_path: Optional[str] = None):
         super().__init__()
         self.desc = "Converting HELM to SMILES"
+        self.custom_sdf_path = custom_sdf_path
 
+        default_sdf_path = os.path.join(
+            (os.path.dirname(__file__)),
+            "..",
+            "parser",
+            "monomers_merged.sdf",
+        )
+        sdf_path = custom_sdf_path if custom_sdf_path else default_sdf_path
+        name = "default_library" if not custom_sdf_path else "custom_library"
+        
         self.lib = MonomerLibrary.from_sdf_file(
-            "test_library",
-            os.path.join(
-                (os.path.dirname(__file__)),
-                "..",
-                "external",
-                "pep",
-                "resources",
-                "monomers.sdf",
-            ),
+            name,
+            sdf_path,
         )
         self.helm_parser = HelmParser(self.lib)
 
@@ -756,20 +1023,23 @@ class Helm2Biln(FormatTransform):
         >>> print(biln_list)  # List of BiLN representations
     """
 
-    def __init__(self):
+    def __init__(self, custom_sdf_path: Optional[str] = None):
         super().__init__()
         self.desc = "Converting HELM to BiLN"
+        self.custom_sdf_path = custom_sdf_path
+
+        default_sdf_path = os.path.join(
+            (os.path.dirname(__file__)),
+            "..",
+            "parser",
+            "monomers_merged.sdf",
+        )
+        sdf_path = custom_sdf_path if custom_sdf_path else default_sdf_path
+        name = "default_library" if not custom_sdf_path else "custom_library"
 
         self.lib = MonomerLibrary.from_sdf_file(
-            "test_library",
-            os.path.join(
-                (os.path.dirname(__file__)),
-                "..",
-                "external",
-                "pep",
-                "resources",
-                "monomers.sdf",
-            ),
+            name,
+            sdf_path,
         )
         self.helm_parser = HelmParser(self.lib)
         self.biln_serializer = BilnSerializer(self.lib)
@@ -808,20 +1078,23 @@ class Biln2Fasta(FormatTransform):
         >>> print(fasta_list)  # List of FASTA sequences
     """
 
-    def __init__(self):
+    def __init__(self, custom_sdf_path: Optional[str] = None):
         super().__init__()
         self.desc = "Converting BiLN to FASTA"
+        self.custom_sdf_path = custom_sdf_path
+
+        default_sdf_path = os.path.join(
+            (os.path.dirname(__file__)),
+            "..",
+            "parser",
+            "monomers_merged.sdf",
+        )
+        sdf_path = custom_sdf_path if custom_sdf_path else default_sdf_path
+        name = "default_library" if not custom_sdf_path else "custom_library"
 
         self.lib = MonomerLibrary.from_sdf_file(
-            "test_library",
-            os.path.join(
-                (os.path.dirname(__file__)),
-                "..",
-                "external",
-                "pep",
-                "resources",
-                "monomers.sdf",
-            ),
+            name,
+            sdf_path,
         )
         self.biln_parser = BilnParser(self.lib)
         self.fasta_serializer = FastaSerializer(self.lib)
@@ -860,20 +1133,23 @@ class Biln2Smiles(FormatTransform):
         >>> print(smiles_list)  # List of SMILES strings
     """
 
-    def __init__(self):
+    def __init__(self, custom_sdf_path: Optional[str] = None):
         super().__init__()
         self.desc = "Converting BiLN to SMILES"
+        self.custom_sdf_path = custom_sdf_path
+
+        default_sdf_path = os.path.join(
+            (os.path.dirname(__file__)),
+            "..",
+            "parser",
+            "monomers_merged.sdf",
+        )
+        sdf_path = custom_sdf_path if custom_sdf_path else default_sdf_path
+        name = "default_library" if not custom_sdf_path else "custom_library"
 
         self.lib = MonomerLibrary.from_sdf_file(
-            "test_library",
-            os.path.join(
-                (os.path.dirname(__file__)),
-                "..",
-                "external",
-                "pep",
-                "resources",
-                "monomers.sdf",
-            ),
+            name,
+            sdf_path,
         )
         self.biln_parser = BilnParser(self.lib)
 
@@ -914,20 +1190,23 @@ class Biln2Helm(FormatTransform):
         >>> print(helm_list)  # List of HELM notations
     """
 
-    def __init__(self):
+    def __init__(self, custom_sdf_path: Optional[str] = None):
         super().__init__()
         self.desc = "Converting BiLN to HELM"
+        self.custom_sdf_path = custom_sdf_path
+
+        default_sdf_path = os.path.join(
+            (os.path.dirname(__file__)),
+            "..",
+            "parser",
+            "monomers_merged.sdf",
+        )
+        sdf_path = custom_sdf_path if custom_sdf_path else default_sdf_path
+        name = "default_library" if not custom_sdf_path else "custom_library"
 
         self.lib = MonomerLibrary.from_sdf_file(
-            "test_library",
-            os.path.join(
-                (os.path.dirname(__file__)),
-                "..",
-                "external",
-                "pep",
-                "resources",
-                "monomers.sdf",
-            ),
+            name,
+            sdf_path,
         )
         self.biln_parser = BilnParser(self.lib)
         self.helm_serializer = HelmSerializer(self.lib)
@@ -976,7 +1255,7 @@ class Smiles2Graph(FormatTransform):
 
     def _process_single(
         self, smiles: str, label: Optional[torch.Tensor] = None
-    ) -> Data:
+    ) -> Any:
         """Convert SMILES string to graph representation (PyTorch Geometric Data object).
 
         Args:
@@ -986,6 +1265,8 @@ class Smiles2Graph(FormatTransform):
         Returns:
             Data: Graph representation with nodes and edges (PyTorch Geometric Data object).
         """
+        _require_graph_dependencies()
+
         # Convert SMILES to graph format by ogb
         graph_data = smiles2graph(smiles)
 
@@ -1004,7 +1285,7 @@ class Smiles2Graph(FormatTransform):
 
     def __call__(
         self, inputs: Union[str, List[str]], label: Optional[torch.Tensor] = None
-    ) -> Union[Data, List[Data]]:
+    ) -> Union[Any, List[Any]]:
         """Call method to handle both single and batch inputs.
 
         Args:
@@ -1018,6 +1299,7 @@ class Smiles2Graph(FormatTransform):
             return [self._process_single(smiles) for smiles in inputs]
         else:
             return self._process_single(inputs, label=label)
+
 
 
 if __name__ == "__main__":
@@ -1130,6 +1412,33 @@ if __name__ == "__main__":
 
     biln_to_helm = biln2helm(biln)
     print(f"BiLN → HELM (single): {biln_to_helm}")
+
+    print("\n" + "=" * 80)
+
+    # Enhanced HELM to FASTA Conversion Tests with Custom Mapping
+    print("🧪 Enhanced HELM to FASTA Conversion Tests:")
+    print("-" * 40)
+    
+    # Test with built-in library (standard conversion)
+    helm2fasta_standard = Helm2Fasta()
+    print("Standard conversion (built-in library):")
+    print(f"HELM → FASTA (standard): {helm2fasta_standard(helm)}")
+    
+    # Test with custom SDF mapping (if file exists)
+    custom_sdf_path = "monomers_merged.sdf"
+    if os.path.exists(custom_sdf_path):
+        print("\nCustom mapping conversion (SDF file):")
+        helm2fasta_custom = Helm2Fasta(custom_sdf_path=custom_sdf_path)
+        helm_custom = "PEPTIDE1{A.[meL].[bHph].[dP].[dL].F}$$$$"
+        fasta_custom = helm2fasta_custom(helm_custom)
+        print(f"HELM → FASTA (custom): {fasta_custom}")
+        
+        # Test CSV batch conversion
+        print("\nTesting CSV batch conversion functionality...")
+        # Note: This would require actual CSV files to test
+        print("CSV conversion function available: convert_helm_csv_to_fasta()")
+    else:
+        print(f"Custom SDF file {custom_sdf_path} not found, skipping custom mapping tests")
 
     print("\n" + "=" * 80)
 

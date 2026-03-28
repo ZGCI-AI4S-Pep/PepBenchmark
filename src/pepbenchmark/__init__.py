@@ -17,3 +17,4 @@ import sys
 external = os.path.expanduser(os.path.join(os.path.dirname(__file__), "external"))
 if external not in sys.path:
     sys.path.insert(0, external)
+

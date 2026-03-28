@@ -34,17 +34,17 @@ def remove_outliers(
     z_threshold: float = 3.0,
 ) -> Tuple[pd.DataFrame, List[int]]:
     """
-    Remove outliers for regression tasks
+    Remove outliers for regression tasks.
 
     Args:
-        df (pd.DataFrame): DataFrame containing sequences and labels
-        label_column (str): Label column name, default is "label"
-        method (str): Outlier detection method, supports "iqr" or "zscore"
-        threshold (float): Threshold multiplier for IQR method, default is 1.5
-        z_threshold (float): Z-score method threshold, default is 3.0
+        df (pd.DataFrame): DataFrame containing sequences and labels.
+        label_column (str): The name of the label column, default is "label".
+        method (str): The outlier detection method, supports "iqr" or "zscore".
+        threshold (float): The threshold multiplier for the IQR method, default is 1.5.
+        z_threshold (float): The threshold for the Z-score method, default is 3.0.
 
     Returns:
-        Tuple[pd.DataFrame, List[int]]: (DataFrame after outlier removal, list of outlier indices)
+        Tuple[pd.DataFrame, List[int]]: A tuple containing the DataFrame after outlier removal and a list of outlier indices.
     """
     if label_column not in df.columns:
         raise ValueError(f"Label column '{label_column}' not found in DataFrame")
@@ -129,18 +129,18 @@ def remove_outliers_by_sequence(
     z_threshold: float = 3.0,
 ) -> Tuple[pd.DataFrame, List[int]]:
     """
-    Remove outliers for regression tasks and display sequence information in logs
+    Remove outliers for regression tasks and display sequence information in logs.
 
     Args:
-        df (pd.DataFrame): DataFrame containing sequences and labels
-        sequence_column (str): Sequence column name, default is "sequence"
-        label_column (str): Label column name, default is "label"
-        method (str): Outlier detection method, supports "iqr" or "zscore"
-        threshold (float): Threshold multiplier for IQR method, default is 1.5
-        z_threshold (float): Z-score method threshold, default is 3.0
+        df (pd.DataFrame): DataFrame containing sequences and labels.
+        sequence_column (str): The name of the sequence column, default is "sequence".
+        label_column (str): The name of the label column, default is "label".
+        method (str): The outlier detection method, supports "iqr" or "zscore".
+        threshold (float): The threshold multiplier for the IQR method, default is 1.5.
+        z_threshold (float): The threshold for the Z-score method, default is 3.0.
 
     Returns:
-        Tuple[pd.DataFrame, List[int]]: (DataFrame after outlier removal, list of outlier indices)
+        Tuple[pd.DataFrame, List[int]]: A tuple containing the DataFrame after outlier removal and a list of outlier indices.
     """
     if sequence_column not in df.columns:
         raise ValueError(f"Sequence column '{sequence_column}' not found in DataFrame")

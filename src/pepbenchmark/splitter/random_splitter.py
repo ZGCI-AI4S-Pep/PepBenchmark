@@ -21,7 +21,8 @@ from pepbenchmark.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
-
+# I wrote a splitting function for the peptide dataset; it includes random, cdhit, and mmseq for single peptides;
+# cold_split for peptide-protein interactions; and for non-natural ones, conversion using SMILES or a HELM2Fasta Converter.
 class RandomSplitter(AbstractSplitter):
     """
     Random data splitter that randomly shuffles data before splitting.
@@ -35,12 +36,18 @@ class RandomSplitter(AbstractSplitter):
     - get_split_indices(): Returns single dict with "train", "valid", "test" keys
     """
 
+    def __init__(self):
+        """Initialize RandomSplitter."""
+        super().__init__()
+        self.logger.info("RandomSplitter initialized")
+
     def get_split_indices(
         self,
         data: Union[List, np.ndarray],
         frac_train: float = 0.8,
         frac_valid: float = 0.1,
         frac_test: float = 0.1,
+        labels: Optional[List[int]] = None,
         seed: Optional[int] = 42,
         **kwargs,
     ) -> Dict[str, Union[List[int], np.ndarray]]:
@@ -51,23 +58,19 @@ class RandomSplitter(AbstractSplitter):
         according to the specified fractions.
 
         Args:
-            data: Input data to split (List or numpy array)
+            data: Input sequences (list of strings or numpy array)
             frac_train: Fraction of data for training (default: 0.8)
             frac_valid: Fraction of data for validation (default: 0.1)
             frac_test: Fraction of data for testing (default: 0.1)
+            labels: Optional class labels for each sequence (not used for splitting but kept for interface consistency)
             seed: Random seed for reproducibility (default: 42)
             **kwargs: Additional parameters (ignored for random splitting)
 
         Returns:
-            Dictionary containing train/valid/test split indices:
-            {
-                "train": [indices for training set],
-                "valid": [indices for validation set],
-                "test": [indices for test set]
-            }
+            Dictionary with 'train', 'valid', 'test' keys containing indices
 
         Raises:
-            ValueError: If fractions don't sum to 1.0 or are invalid
+            ValueError: If fractions don't sum to approximately 1.0
         """
         logger.info(
             f"Starting random split: data_size={len(data)}, frac_train={frac_train}, "
@@ -88,11 +91,11 @@ class RandomSplitter(AbstractSplitter):
         train_size = int(len(data) * frac_train)
         valid_size = int(len(data) * frac_valid)
 
-        # Create split indices
+        # Create split indices - convert numpy arrays to lists for consistency
         split_result = {
-            "train": perm[:train_size],
-            "valid": perm[train_size : train_size + valid_size],
-            "test": perm[train_size + valid_size :],
+            "train": perm[:train_size].tolist(),
+            "valid": perm[train_size : train_size + valid_size].tolist(),
+            "test": perm[train_size + valid_size :].tolist(),
         }
 
         logger.info(
@@ -171,9 +174,9 @@ class RandomSplitter(AbstractSplitter):
             valid_indices = remaining_indices[train_size:]
 
             kfold_results[f"fold_{fold_idx}"] = {
-                "train": np.array(train_indices),
-                "valid": np.array(valid_indices),
-                "test": np.array(test_indices),
+                "train": train_indices,  # Already a list
+                "valid": valid_indices,  # Already a list  
+                "test": test_indices.tolist(),  # Convert numpy array to list
             }
 
             logger.info(
@@ -186,7 +189,7 @@ class RandomSplitter(AbstractSplitter):
 
 
 if __name__ == "__main__":
-    from pepbenchmark.single_peptide.singeltask_dataset import SingleTaskDatasetManager
+    from pepbenchmark.dataset_manager.single_dataset import SingleTaskDatasetManager
 
     # Test with a dataset
     dataset_name = "AV_APML"  # Change this to your dataset name

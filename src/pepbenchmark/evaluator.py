@@ -1,3 +1,5 @@
+"""Evaluation helpers for classification and regression benchmarks."""
+
 # Copyright ZGCA
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -46,9 +48,14 @@ logger = get_logger()
 def specificity_score(
     y_true: Union[List, np.ndarray], y_pred: Union[List, np.ndarray]
 ) -> float:
-    """Compute **specificity (true negative rate)** for *binary* classification.
+    """Compute specificity for binary classification predictions.
 
-    Specificity = TN / (TN + FP)
+    Args:
+        y_true: Ground-truth labels.
+        y_pred: Predicted binary labels.
+
+    Returns:
+        The true-negative rate.
     """
     cm = confusion_matrix(y_true, y_pred)
     if cm.shape != (2, 2):
@@ -60,7 +67,15 @@ def specificity_score(
 def g_mean_score(
     y_true: Union[List, np.ndarray], y_pred: Union[List, np.ndarray]
 ) -> float:
-    """Geometric mean of sensitivity and specificity for *binary* tasks."""
+    """Compute the geometric mean of sensitivity and specificity.
+
+    Args:
+        y_true: Ground-truth labels.
+        y_pred: Predicted binary labels.
+
+    Returns:
+        The geometric mean score.
+    """
     sensitivity = recall_score(y_true, y_pred)
     specificity = specificity_score(y_true, y_pred)
     return np.sqrt(sensitivity * specificity)
@@ -96,17 +111,17 @@ Classification_Metric_Map: Dict[str, callable] = {
     "log-loss": log_loss,
     # Rank‑/top‑k‑based
 }
-
+Classification_Metric = Classification_Metric_Map.keys()
 # Regression metrics dictionary – maps names to functions
 Regression_Metric_Map: Dict[str, callable] = {
     "mse": mean_squared_error,
-    "rmse": lambda yt, yp: mean_squared_error(yt, yp, squared=False),
+    "rmse": lambda yt, yp: np.sqrt(mean_squared_error(yt, yp)),
     "mae": mean_absolute_error,
     "r2": r2_score,
     "pcc": lambda yt, yp: pearsonr(yt, yp)[0],
     "spearman": lambda yt, yp: spearmanr(yt, yp)[0],
 }
-
+Regression_Metric=Regression_Metric_Map.keys()
 # ---------------------------------------------------------------------------
 # Core evaluation helpers
 # ---------------------------------------------------------------------------
@@ -118,24 +133,18 @@ def evaluate_classification(
     y_score: Union[List, np.ndarray] | None = None,
     metrics: List[str] | None = None,
 ) -> Dict[str, float]:
-    """Evaluate classification performance over *multiple* metrics.
+    """Evaluate a classification task with one or more metrics.
 
-    Parameters
-    ----------
-    y_true : Union[List, np.ndarray]
-        Ground‑truth labels.
-    y_pred : Union[List, np.ndarray]
-        Discrete predictions (same shape as *y_true*).
-    y_score : Union[List, np.ndarray] | None, optional
-        Class‑probabilities / scores (n_samples × n_classes) required for
-        probability‑dependent metrics such as *roc‑auc* or *log‑loss*.
-    metrics : List[str] | None, optional
-        Which metrics to compute.  *None* ⇒ all available.
+    Args:
+        y_true: Ground-truth labels.
+        y_pred: Discrete class predictions aligned with ``y_true``.
+        y_score: Optional probability or score values required by
+            probability-aware metrics such as ``roc-auc``.
+        metrics: Optional list of metric names. When omitted, all registered
+            classification metrics are attempted.
 
-    Returns
-    -------
-    Dict[str, float]
-        A dictionary of metric names and their computed values.
+    Returns:
+        A mapping from metric name to computed value.
     """
     if metrics is None:
         metrics = list(Classification_Metric_Map.keys())
@@ -174,7 +183,16 @@ def evaluate_regression(
     y_pred: Union[List, np.ndarray],
     metrics: List[str] | None = None,
 ) -> Dict[str, float]:
-    """Evaluate regression performance using multiple metrics."""
+    """Evaluate a regression task with one or more metrics.
+
+    Args:
+        y_true: Ground-truth target values.
+        y_pred: Predicted target values.
+        metrics: Optional list of regression metric names to compute.
+
+    Returns:
+        A mapping from metric name to computed value.
+    """
     if metrics is None:
         metrics = list(Regression_Metric_Map.keys())
 
@@ -195,9 +213,17 @@ def evaluate_regression(
 # ---------------------------------------------------------------------------
 
 
-# TODO: 推荐的指标应该与数据集有关；这个我们后面跑完结果在看吧
+# TODO: Recommended metrics should be dataset-dependent; we'll look at this after running the results.
 def get_recommended_metrics(task_type: str) -> List[str]:
-    """Return a sensible, *task‑specific* default metric subset."""
+    """Return a task-specific default metric subset.
+
+    Args:
+        task_type: Task name such as ``"binary_classification"`` or
+            ``"regression"``.
+
+    Returns:
+        A list of recommended metric names.
+    """
     recs = {
         "binary_classification": [
             "accuracy",
@@ -236,7 +262,17 @@ def compute_all_metrics(
     task_type: str,
     y_score: Union[List, np.ndarray] | None = None,
 ) -> Dict[str, float]:
-    """Thin wrapper that computes *recommended* metrics given the task type."""
+    """Compute the recommended metrics for a given task type.
+
+    Args:
+        y_true: Ground-truth labels or targets.
+        y_pred: Predicted labels or targets.
+        task_type: Task identifier used to choose the default metrics.
+        y_score: Optional score or probability array for classification tasks.
+
+    Returns:
+        A mapping from metric name to computed value.
+    """
     task_type = task_type.lower()
     if "classification" in task_type:
         return evaluate_classification(
