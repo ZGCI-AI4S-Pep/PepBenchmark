@@ -11,7 +11,7 @@ PepBenchmark consists of three major components:
    - 29 canonical peptide datasets  
    - 6 non-canonical peptide datasets  
    - Organized into 7 task groups  
-   This is, to the best of our knowledge, the most comprehensive AI-ready peptide dataset resource to date.
+
 
 2. **PepBenchPipeline**  
    A standardized preprocessing pipeline for:
@@ -231,10 +231,12 @@ https://huggingface.co/datasets/jiahuizhang/PepBenchData_raw
 
 ## PepBenchPipeline
 
-Example pipeline (see `notebook/pipeline`):
+For custom dataset construction, use:
 - Negative sampling  
 - Data splitting  
 - Feature generation  
+Example pipeline (see `notebook/pipeline`):
+
 
 ---
 
@@ -247,20 +249,6 @@ notebook/model
 
 ---
 
-## Advanced Usage
-
-For custom dataset construction, use:
-
-- `pepbenchmark.neg_sampler`  
-- `pepbenchmark.splitter`  
-- `pepbenchmark.redundancy`  
-
-See:
-```
-notebook/pepbenchpipeline
-```
-
----
 
 ## Pretrained Models
 
