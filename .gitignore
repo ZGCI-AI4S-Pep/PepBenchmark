@@ -7,6 +7,6 @@ uploader.ipynb
 docs/
 notebook/model/results/
 src/pepbenchmark.egg-info/
-notebook/pipeline/unref_final_with_short.csv
+notebook/pipeline/uniref_final_with_short.csv
 notebook/pipeline/dppiv_inhibitors/
 __pycache__
