@@ -2,6 +2,7 @@
 
 import json
 import os
+import tempfile
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
@@ -15,6 +16,7 @@ from pepbenchmark.utils.logging import get_logger
 logger = get_logger()
 
 BASE_URL = "https://huggingface.co/datasets/jiahuizhang/PepBenchData/resolve/main/"
+DOWNLOAD_ROOT_CANDIDATES = ("", "PepBenchData-50/")
 
 
 
@@ -104,6 +106,7 @@ class SinglePeptideDatasetManager:
             feature_name: Name of the official feature to load, such as
                 ``"fasta"``, ``"label"``, or ``"ecfp4"``.
         """
+        self._check_official_feature_name(feature_name)
         if feature_name in self.features:
             logger.info(f"Feature {feature_name} already exists")
             return
@@ -210,24 +213,49 @@ class SinglePeptideDatasetManager:
         else:
             raise ValueError(f"Name '{name}' is not an official feature or split type.")
 
-        url = f"{BASE_URL}{self.dataset_name}/{path}"
         file_path = os.path.join(self.dataset_path, path)
         os.makedirs(os.path.dirname(file_path), exist_ok=True)
-        logger.info(
-            f"Downloading from {url} and store in {file_path}"
-        )
         headers = {"User-Agent": "Mozilla/5.0"}
 
-        try:
-            with requests.get(url, stream=True, timeout=100, headers=headers) as r:
-                r.raise_for_status()
-                with open(file_path, "wb") as f:
-                    for chunk in r.iter_content(chunk_size=8192):
-                        if chunk:
-                            f.write(chunk)
-        except requests.RequestException as e:
-            logger.error(f"Failed to download {name}: {e}")
-            raise
+        attempted_urls: List[str] = []
+        for root in DOWNLOAD_ROOT_CANDIDATES:
+            url = f"{BASE_URL}{root}{self.dataset_name}/{path}"
+            attempted_urls.append(url)
+            logger.info(f"Downloading from {url} and store in {file_path}")
+            try:
+                with requests.get(url, stream=True, timeout=100, headers=headers) as r:
+                    if r.status_code == 404:
+                        logger.warning(f"File not found at {url}, try next candidate")
+                        continue
+                    r.raise_for_status()
+                    with tempfile.NamedTemporaryFile(
+                        mode="wb",
+                        delete=False,
+                        dir=os.path.dirname(file_path),
+                        prefix=".download_",
+                    ) as f:
+                        temp_path = f.name
+                        for chunk in r.iter_content(chunk_size=8192):
+                            if chunk:
+                                f.write(chunk)
+                    os.replace(temp_path, file_path)
+                    return
+            except requests.RequestException as e:
+                logger.warning(f"Download attempt failed for {url}: {e}")
+            except Exception as e:
+                logger.warning(f"Unexpected error while downloading {url}: {e}")
+                try:
+                    if "temp_path" in locals() and os.path.exists(temp_path):
+                        os.remove(temp_path)
+                except OSError:
+                    pass
+
+        attempted = "\n - ".join(attempted_urls)
+        raise requests.HTTPError(
+            "Failed to download official file. Tried URLs:\n"
+            f" - {attempted}\n"
+            f"Local target path: {file_path}"
+        )
 
     def set_official_split_indices(
         self, split_type: str = "random_split", fold_seed: int = 0
@@ -256,6 +284,14 @@ class SinglePeptideDatasetManager:
         with open(split_path, "r") as f:
             all_splits = json.load(f)
         splits = all_splits.get(f"seed_{fold_seed}")
+        if splits is None:
+            available_seeds = sorted(
+                k for k in all_splits.keys() if isinstance(k, str) and k.startswith("seed_")
+            )
+            raise ValueError(
+                f"Seed {fold_seed} not found in split '{split_type}'. "
+                f"Available seeds: {available_seeds}"
+            )
         self.split_indices = splits
         logger.info(
             f"Set official split ==={split_type}=== with seed ===={fold_seed}=== successfully"
