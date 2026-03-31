@@ -257,7 +257,7 @@ notebook/model
 We provide a peptide-specific fine-tuned ESM-150M model.
 
 Training details:
-https://github.com/ZGCI-AI4S-Pep/PepBenchmark
+[https://github.com/ZGCI-AI4S-Pep/PepBenchmark](https://github.com/ZGCI-AI4S-Pep/peptide-esm)
 
 ---
 
