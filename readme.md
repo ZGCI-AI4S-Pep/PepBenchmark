@@ -268,6 +268,9 @@ We trained a model that:
 
 Used for improving negative sampling in non-canonical datasets.
 
+Training details:
+https://github.com/ZGCI-AI4S-Pep/Natural-to-Non-Natural-Peptide-Translation
+
 ---
 
 ## Citation
