@@ -258,6 +258,8 @@ We provide a peptide-specific fine-tuned ESM-150M model.
 
 Training details:
 https://github.com/ZGCI-AI4S-Pep/peptide-esm
+
+Checkpoint: https://huggingface.co/jiahuizhang/esm-150m-peptide-fine-tune
 ---
 
 ## Non-Canonical Peptide Generation
